@@ -1,10 +1,12 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
 #include <iostream>
+#include <iomanip>
+#include <sstream>
 #include "Theme.h"
 #include "OptionsTheme.h"
 #include "Slider.cpp"
-#include "GameBackground.h"  // Nowy nagłówek
+#include "GameBackground.h"
 
 enum class GameState {
     MainMenu,
@@ -20,6 +22,13 @@ int main() {
         sf::Style::Titlebar | sf::Style::Close
         );
     window.setVerticalSyncEnabled(true);
+
+    // Czcionka do napisów
+    sf::Font gameFont;
+    if (!gameFont.loadFromFile("images/Quicksand-VariableFont_wght.ttf")) {
+        std::cerr << "Nie można wczytać czcionki LuckiestGuy-Regular.ttf\n";
+        return -1;
+    }
 
     // --- 1) Menu główne ---
     sf::Texture menuTex;
@@ -74,7 +83,6 @@ int main() {
         OPTIONS_THEME.thumbRadius
         );
 
-    // Backup wartości przed wejściem w OptionsMenu
     float backupMusic = musicSlider.getValue();
     float backupSfx   = sfxSlider.getValue();
 
@@ -85,8 +93,29 @@ int main() {
         return -1;
     }
 
-    // --- 5) Stan gry ---
+    // --- 5) Przygotowanie napisów gry ---
+    sf::Color brown(101, 67, 33); // Brązowy kolor
+
+    sf::Text labelMoney("Stan konta", gameFont, 24);
+    labelMoney.setFillColor(brown);
+    labelMoney.setPosition(77.f, 726.f);
+
+    sf::Text labelEnergy("Energia", gameFont, 24);
+    labelEnergy.setFillColor(brown);
+    labelEnergy.setPosition(390.f, 726.f);
+
+    sf::Text labelEnvironment("Stan srodowiska", gameFont, 24);
+    labelEnvironment.setFillColor(brown);
+    labelEnvironment.setPosition(654.f, 726.f);
+
+    sf::Text labelTime("Czas gry:", gameFont, 30);
+    labelTime.setFillColor(brown);
+    labelTime.setPosition(950.f, 742.f);
+
+    // --- 6) Stan gry ---
     GameState state = GameState::MainMenu;
+
+    sf::Clock gameClock;
 
     while (window.isOpen()) {
         sf::Event e;
@@ -95,20 +124,18 @@ int main() {
                 window.close();
             }
 
-            // Obsługa kliknięć lewym przyciskiem
             if (e.type == sf::Event::MouseButtonPressed &&
                 e.mouseButton.button == sf::Mouse::Left)
             {
                 sf::Vector2f pos = window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y});
                 if (state == GameState::MainMenu) {
                     if (hotNew.contains(pos)) {
-                        // Przejście do stanu Playing
                         state = GameState::Playing;
+                        gameClock.restart();
                     }
                     else if (hotOpt.contains(pos)) {
-                        // Backup pozycji sliderów
                         backupMusic = musicSlider.getValue();
-                        backupSfx   = sfxSlider.getValue();
+                        backupSfx = sfxSlider.getValue();
                         state = GameState::OptionsMenu;
                     }
                     else if (hotExit.contains(pos)) {
@@ -123,7 +150,6 @@ int main() {
                         state = GameState::MainMenu;
                     }
                     else if (hotCancel.contains(pos)) {
-                        // Przywrócenie wartości sliderów
                         musicSlider.setValue(backupMusic);
                         sfxSlider.setValue(backupSfx);
                         std::cout << "Anulowano zmiany\n";
@@ -132,11 +158,20 @@ int main() {
                 }
             }
 
-            // Przekazujemy zdarzenia do sliderów tylko w OptionsMenu
             if (state == GameState::OptionsMenu) {
                 musicSlider.handleEvent(e, window);
                 sfxSlider.handleEvent(e, window);
             }
+        }
+
+        if (state == GameState::Playing) {
+            sf::Time elapsed = gameClock.getElapsedTime();
+            int minutes = elapsed.asSeconds() / 60;
+            int seconds = static_cast<int>(elapsed.asSeconds()) % 60;
+
+            std::ostringstream oss;
+            oss << "Czas gry: " << minutes << ":" << std::setw(2) << std::setfill('0') << seconds;
+            labelTime.setString(oss.str());
         }
 
         window.clear();
@@ -150,38 +185,13 @@ int main() {
             sfxSlider.draw(window);
         }
         else if (state == GameState::Playing) {
-            // Rysowanie tła gry
             gameBg.draw(window);
+            window.draw(labelMoney);
+            window.draw(labelEnergy);
+            window.draw(labelEnvironment);
+            window.draw(labelTime);
 
-            // Tutaj możesz dołożyć dalsze rysowane obiekty gry,
-            // np. tereny, budynki, animacje – w pustym, środkowym obszarze zielonego pola.
         }
-/*
-        // (opcjonalnie) rysowanie ramki dla debugowania
-        sf::RectangleShape debugRect;
-        debugRect.setOutlineColor(sf::Color::Red);
-        debugRect.setFillColor(sf::Color::Transparent);
-        debugRect.setOutlineThickness(2.f);
-
-        // odkomentuj, by zobaczyć hotspoty:
-
-        debugRect.setPosition(hotSave.left, hotSave.top);
-        debugRect.setSize({hotSave.width, hotSave.height});
-        window.draw(debugRect);
-        debugRect.setPosition(hotCancel.left, hotCancel.top);
-        debugRect.setSize({hotCancel.width, hotCancel.height});
-        window.draw(debugRect);
-
-        debugRect.setPosition(hotNew.left, hotNew.top);
-        debugRect.setSize({hotNew.width, hotNew.height});
-        window.draw(debugRect);
-        debugRect.setPosition(hotOpt.left, hotOpt.top);
-        debugRect.setSize({hotOpt.width, hotOpt.height});
-        window.draw(debugRect);
-        debugRect.setPosition(hotExit.left, hotExit.top);
-        debugRect.setSize({hotExit.width, hotExit.height});
-        window.draw(debugRect);
-*/
 
         window.display();
     }
