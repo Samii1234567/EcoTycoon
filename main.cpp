@@ -3,6 +3,7 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <string>
 #include "Theme.h"
 #include "OptionsTheme.h"
 #include "Slider.cpp"        // Pozostawione tak, jak masz w projekcie
@@ -31,7 +32,20 @@ int main() {
         return -1;
     }
 
-    // --- 1) Menu główne ---
+    // --- 1) Deklaracja 4 zmiennych „zasobów” ---
+    // a) Stan konta (pieniądze)
+    int currentMoney = 1000;      // np. zaczynamy z 1000 jednostkami
+
+    // b) Aktualna ilość energii
+    int currentEnergy = 0;        // np. początkowo 0 jednostek
+
+    // c) Maksymalna ilość przechowywanej energii
+    int maxEnergy = 100;          // np. magazyn może pomieścić maksymalnie 100
+
+    // d) Stan środowiska w procentach (0 – całkowicie zniszczone, 100 – w pełni zdrowe)
+    int environmentHealth = 100;  // zaczynamy w 100% zdrowym stanie
+
+    // --- 2) Menu główne ---
     sf::Texture menuTex;
     if (!menuTex.loadFromFile("images/eco_tycoon_menu.png")) {
         std::cerr << "Błąd: nie można wczytać eco_tycoon_menu.png\n";
@@ -52,7 +66,7 @@ int main() {
     sf::FloatRect hotOpt (btnX, 495.f, btnW, btnH);
     sf::FloatRect hotExit(btnX, 610.f, btnW, btnH);
 
-    // --- 2) Menu opcji ---
+    // --- 3) Menu opcji ---
     sf::Texture optsTex;
     if (!optsTex.loadFromFile(OPTIONS_THEME.backgroundImagePath)) {
         std::cerr << "Błąd: nie można wczytać " << OPTIONS_THEME.backgroundImagePath << "\n";
@@ -72,7 +86,7 @@ int main() {
     sf::FloatRect hotSave   (optX - 140.f, OPTIONS_THEME.saveButtonY,  optBW, optBH);
     sf::FloatRect hotCancel (optX + 140.f, OPTIONS_THEME.cancelButtonY, optBW, optBH);
 
-    // --- 3) Inicjalizacja sliderów ---
+    // --- 4) Inicjalizacja sliderów ---
     Slider musicSlider(
         (WIN_W - OPTIONS_THEME.sliderWidth) / 2.f,
         OPTIONS_THEME.sliderMusicY,
@@ -90,14 +104,14 @@ int main() {
     float backupMusic = musicSlider.getValue();
     float backupSfx   = sfxSlider.getValue();
 
-    // --- 4) Wczytanie tła gry ---
+    // --- 5) Wczytanie tła gry ---
     GameBackground gameBg;
     if (!gameBg.loadFromFile("images/eco_tycoon_game.png")) {
         std::cerr << "Błąd: nie można wczytać images/eco_tycoon_game.png\n";
         return -1;
     }
 
-    // --- 5) BuildMenu ---
+    // --- 6) BuildMenu ---
     BuildMenu buildMenu;
     if (!buildMenu.initialize(gameFont)) {
         std::cerr << "Nie można zainicjować BuildMenu\n";
@@ -108,7 +122,7 @@ int main() {
 
     sf::FloatRect hammerHotspot(14.f, 18.f, 90.f, 90.f);
 
-    // --- 6) Przygotowanie napisów gry ---
+    // --- 7) Przygotowanie napisów gry ---
     sf::Color brown(101, 67, 33); // Brązowy kolor
 
     sf::Text labelMoney("Stan konta", gameFont, 24);
@@ -125,12 +139,23 @@ int main() {
 
     sf::Text labelTime("Czas gry:", gameFont, 30);
     labelTime.setFillColor(brown);
-    labelTime.setPosition(950.f, 742.f);
+    labelTime.setPosition(980.f, 744.f);
+
+    sf::Text moneyValue(std::to_string(currentMoney) + "$", gameFont, 24);
+    moneyValue.setFillColor(brown);
+    moneyValue.setPosition(77.f, 752.f);
+
+    sf::Text energyValue(std::to_string(currentEnergy) + "/" + std::to_string(maxEnergy), gameFont, 24);
+    energyValue.setFillColor(brown);
+    energyValue.setPosition(390.f, 752.f);
+
+    sf::Text envValue(std::to_string(environmentHealth) + "%", gameFont, 24);
+    envValue.setFillColor(brown);
+    envValue.setPosition(654.f, 752.f);
 
     // --- 8) Stan gry ---
     GameState state = GameState::MainMenu;
     sf::Clock gameClock;   // odmierzanie czasu w stanie Playing
-    sf::Clock deltaClock;  // do update'owania BuildMenu
 
     while (window.isOpen()) {
         sf::Event e;
@@ -149,7 +174,6 @@ int main() {
                     if (hotNew.contains(pos)) {
                         state = GameState::Playing;
                         gameClock.restart();
-                        deltaClock.restart();
                     }
                     else if (hotOpt.contains(pos)) {
                         backupMusic = musicSlider.getValue();
@@ -206,10 +230,6 @@ int main() {
             oss << "Czas: " << minutes << ":"
                 << std::setw(2) << std::setfill('0') << seconds;
             labelTime.setString(oss.str());
-
-            // 8.2 Podnoszenie cen w BuildMenu (co delta)
-            float delta = deltaClock.restart().asSeconds();
-            buildMenu.update(delta);
         }
 
         // Rysowanie
@@ -232,6 +252,10 @@ int main() {
             window.draw(labelEnergy);
             window.draw(labelEnvironment);
             window.draw(labelTime);
+
+            window.draw(moneyValue);
+            window.draw(energyValue);
+            window.draw(envValue);
 
             // 9.3 Rysujemy BuildMenu, jeśli młotek wciśnięty
             if (buildMenu.isVisible()) {
