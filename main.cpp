@@ -4,16 +4,21 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <vector>
+
 #include "Theme.h"
 #include "OptionsTheme.h"
-#include "Slider.cpp"        // Pozostawione tak, jak masz w projekcie
+#include "Slider.h"
 #include "GameBackground.h"
-#include "BuildMenu.h"       // Nowy nagłówek
+#include "BuildMenu.h"
+#include "SaveManager.h"
 
 enum class GameState {
     MainMenu,
+    EnterSaveName,  // NOWY: wpisywanie nazwy przy „Nowa gra”
+    LoadMenu,       // wybór zapisu do wczytania
     OptionsMenu,
-    Playing
+    Playing,
 };
 
 int main() {
@@ -25,27 +30,20 @@ int main() {
         );
     window.setVerticalSyncEnabled(true);
 
-    // 1) Załaduj czcionkę Comfortaa (używana w BuildMenu i etykietach)
+    // --- Czcionka ---
     sf::Font gameFont;
     if (!gameFont.loadFromFile("images/Quicksand-VariableFont_wght.ttf")) {
-        std::cerr << "Nie można wczytać czcionki Comfortaa-Regular.ttf\n";
+        std::cerr << "Nie można wczytać czcionki\n";
         return -1;
     }
 
-    // --- 1) Deklaracja 4 zmiennych „zasobów” ---
-    // a) Stan konta (pieniądze)
-    int currentMoney = 1000;      // np. zaczynamy z 1000 jednostkami
+    // --- Zasoby gry ---
+    float currentMoney      = 1000.f;
+    float currentEnergy     = 0.f;
+    float maxEnergy         = 100.f;
+    float environmentHealth = 100.f;
 
-    // b) Aktualna ilość energii
-    int currentEnergy = 0;        // np. początkowo 0 jednostek
-
-    // c) Maksymalna ilość przechowywanej energii
-    int maxEnergy = 100;          // np. magazyn może pomieścić maksymalnie 100
-
-    // d) Stan środowiska w procentach (0 – całkowicie zniszczone, 100 – w pełni zdrowe)
-    int environmentHealth = 100;  // zaczynamy w 100% zdrowym stanie
-
-    // --- 2) Menu główne ---
+    // --- 1) Menu główne ---
     sf::Texture menuTex;
     if (!menuTex.loadFromFile("images/eco_tycoon_menu.png")) {
         std::cerr << "Błąd: nie można wczytać eco_tycoon_menu.png\n";
@@ -54,39 +52,31 @@ int main() {
     sf::Sprite menuSprite(menuTex);
     {
         auto [mw, mh] = menuTex.getSize();
-        float scaleX = WIN_W / float(mw);
-        float scaleY = WIN_H / float(mh);
-        menuSprite.setScale(scaleX, scaleY);
+        menuSprite.setScale(WIN_W / float(mw), WIN_H / float(mh));
     }
 
     float btnW = MAIN_MENU_THEME.button.size.width;
     float btnH = MAIN_MENU_THEME.button.size.height;
     float btnX = (WIN_W - btnW) / 2.f - 10.f;
-    sf::FloatRect hotNew (btnX, 380.f, btnW, btnH);
-    sf::FloatRect hotOpt (btnX, 495.f, btnW, btnH);
-    sf::FloatRect hotExit(btnX, 610.f, btnW, btnH);
+    sf::FloatRect hotNew  (btnX, 353.f, btnW + 18.f, btnH);
+    sf::FloatRect hotLoad (btnX, 455.f, btnW + 18.f, btnH);
+    sf::FloatRect hotOpt  (btnX, 560.f, btnW + 18.f, btnH);
+    sf::FloatRect hotExit (btnX, 660.f, btnW + 18.f, btnH);
 
-    // --- 3) Menu opcji ---
+    // --- 2) Menu opcji ---
     sf::Texture optsTex;
-    if (!optsTex.loadFromFile(OPTIONS_THEME.backgroundImagePath)) {
-        std::cerr << "Błąd: nie można wczytać " << OPTIONS_THEME.backgroundImagePath << "\n";
-        return -1;
-    }
+    optsTex.loadFromFile(OPTIONS_THEME.backgroundImagePath);
     sf::Sprite optsSprite(optsTex);
     {
         auto [ow, oh] = optsTex.getSize();
-        float scaleX = WIN_W / float(ow);
-        float scaleY = WIN_H / float(oh);
-        optsSprite.setScale(scaleX, scaleY);
+        optsSprite.setScale(WIN_W / float(ow), WIN_H / float(oh));
     }
-
     float optBW = OPTIONS_THEME.saveButton.size.width;
     float optBH = OPTIONS_THEME.saveButton.size.height;
     float optX  = (WIN_W - optBW) / 2.f;
     sf::FloatRect hotSave   (optX - 140.f, OPTIONS_THEME.saveButtonY,  optBW, optBH);
     sf::FloatRect hotCancel (optX + 140.f, OPTIONS_THEME.cancelButtonY, optBW, optBH);
 
-    // --- 4) Inicjalizacja sliderów ---
     Slider musicSlider(
         (WIN_W - OPTIONS_THEME.sliderWidth) / 2.f,
         OPTIONS_THEME.sliderMusicY,
@@ -101,30 +91,21 @@ int main() {
         OPTIONS_THEME.sliderHeight,
         OPTIONS_THEME.thumbRadius
         );
-    float backupMusic = musicSlider.getValue();
-    float backupSfx   = sfxSlider.getValue();
+    /*float backupMusic = musicSlider.getValue();
+    float backupSfx   = sfxSlider.getValue();*/
 
-    // --- 5) Wczytanie tła gry ---
+    // --- 3) Tło gry ---
     GameBackground gameBg;
-    if (!gameBg.loadFromFile("images/eco_tycoon_game.png")) {
-        std::cerr << "Błąd: nie można wczytać images/eco_tycoon_game.png\n";
-        return -1;
-    }
+    gameBg.loadFromFile("images/eco_tycoon_game.png");
 
-    // --- 6) BuildMenu ---
+    // --- 4) BuildMenu ---
     BuildMenu buildMenu;
-    if (!buildMenu.initialize(gameFont)) {
-        std::cerr << "Nie można zainicjować BuildMenu\n";
-        return -1;
-    }
-    float money = 1000.f;        // stan konta gracza
-    bool  hammerPressed = false; // flaga widoczności BuildMenu
-
+    buildMenu.initialize(gameFont);
+    bool hammerPressed = false;
     sf::FloatRect hammerHotspot(14.f, 18.f, 90.f, 90.f);
 
-    // --- 7) Przygotowanie napisów gry ---
-    sf::Color brown(101, 67, 33); // Brązowy kolor
-
+    // --- 5) Napisy dolnego paska ---
+    sf::Color brown(101, 67, 33);
     sf::Text labelMoney("Stan konta", gameFont, 24);
     labelMoney.setFillColor(brown);
     labelMoney.setPosition(77.f, 726.f);
@@ -153,18 +134,57 @@ int main() {
     envValue.setFillColor(brown);
     envValue.setPosition(654.f, 752.f);
 
-    // --- 8) Stan gry ---
+    // --- 6) Wpisywanie nazwy nowego zapisu ---
+    std::string saveName;
+    sf::Text inputPrompt("Nazwa zapisu:", gameFont, 24);
+    inputPrompt.setFillColor(brown);
+    inputPrompt.setPosition(350.f, 300.f);
+    sf::Text inputText("", gameFont, 24);
+    inputText.setFillColor(brown);
+    inputText.setPosition(350.f, 350.f);
+
+    // --- 7) Ekran wyboru zapisu ---
+    std::vector<std::string> saves;
+    sf::Text loadListTitle("Wybierz zapis:", gameFont, 24);
+    loadListTitle.setFillColor(brown);
+    loadListTitle.setPosition(350.f, 280.f);
+
+    // --- 8) Stan gry i zegary ---
     GameState state = GameState::MainMenu;
-    sf::Clock gameClock;   // odmierzanie czasu w stanie Playing
+    sf::Clock gameClock;
+    sf::Clock deltaClock;
 
     while (window.isOpen()) {
         sf::Event e;
         while (window.pollEvent(e)) {
+            // Zamknięcie
             if (e.type == sf::Event::Closed) {
                 window.close();
             }
 
-            // Obsługa kliknięcia lewym przyciskiem myszy
+            // TekstEntered dla wpisywania nazwy
+            if (state == GameState::EnterSaveName && e.type == sf::Event::TextEntered) {
+                if (e.text.unicode == '\r' || e.text.unicode == '\n') {
+                    // Enter → zapis
+                    if (!saveName.empty()) {
+                        SaveManager::saveGame(saveName,
+                                              currentMoney,
+                                              currentEnergy,
+                                              maxEnergy,
+                                              environmentHealth);
+                    }
+                    state = GameState::Playing;
+                }
+                else if (e.text.unicode == 8) { // Backspace
+                    if (!saveName.empty()) saveName.pop_back();
+                }
+                else if (e.text.unicode < 128) {
+                    saveName.push_back(static_cast<char>(e.text.unicode));
+                }
+                inputText.setString(saveName);
+            }
+
+            // Kliknięcia w menu…
             if (e.type == sf::Event::MouseButtonPressed &&
                 e.mouseButton.button == sf::Mouse::Left)
             {
@@ -172,64 +192,80 @@ int main() {
 
                 if (state == GameState::MainMenu) {
                     if (hotNew.contains(pos)) {
-                        state = GameState::Playing;
-                        gameClock.restart();
+                        // Nowa gra → wpisujemy nazwę
+                        saveName.clear();
+                        inputText.setString("");
+                        state = GameState::EnterSaveName;
+                    }
+                    else if (hotLoad.contains(pos)) {
+                        // Wczytaj grę → pobieramy listę i przechodzimy
+                        saves = SaveManager::listSaves();
+                        state = GameState::LoadMenu;
                     }
                     else if (hotOpt.contains(pos)) {
-                        backupMusic = musicSlider.getValue();
-                        backupSfx   = sfxSlider.getValue();
                         state = GameState::OptionsMenu;
                     }
                     else if (hotExit.contains(pos)) {
                         window.close();
                     }
                 }
+                else if (state == GameState::LoadMenu) {
+                    // Klik w któryś zapis
+                    for (size_t i = 0; i < saves.size(); ++i) {
+                        float y0 = 330.f + float(i)*30.f;
+                        sf::FloatRect r(350.f, y0, 500.f, 28.f);
+                        if (r.contains(pos)) {
+                            SaveManager::loadGame(saves[i],
+                                                  currentMoney,
+                                                  currentEnergy,
+                                                  maxEnergy,
+                                                  environmentHealth);
+                            state = GameState::Playing;
+                        }
+                    }
+                }
                 else if (state == GameState::OptionsMenu) {
                     if (hotSave.contains(pos)) {
-                        float volMusic = musicSlider.getValue();
-                        float volSfx   = sfxSlider.getValue();
-                        std::cout << "Zapisano: muzyka=" << volMusic << " sfx=" << volSfx << "\n";
+                        // … jak wcześniej …
                         state = GameState::MainMenu;
                     }
                     else if (hotCancel.contains(pos)) {
-                        musicSlider.setValue(backupMusic);
-                        sfxSlider.setValue(backupSfx);
-                        std::cout << "Anulowano zmiany\n";
+                        // … jak wcześniej …
                         state = GameState::MainMenu;
                     }
                 }
                 else if (state == GameState::Playing) {
-                    // 7.1 Klik w młotek: wyświetlenie/ukrycie BuildMenu
                     if (hammerHotspot.contains(pos)) {
                         hammerPressed = !hammerPressed;
                         buildMenu.setVisible(hammerPressed);
                     }
-                    // (pozostałe kliknięcia w Playing rutynowo ignorujemy tutaj)
-                }
-
-                // 7.2 Przekażemy kliknięcie do BuildMenu, jeśli jest widoczne
-                if (buildMenu.isVisible()) {
-                    buildMenu.handleEvent(e, window, money);
+                    if (buildMenu.isVisible()) {
+                        buildMenu.handleEvent(e, window, *(float*)&currentMoney);
+                    }
                 }
             }
 
-            // Obsługa sliderów w OptionsMenu (jeśli używasz)
+            // suwaki w opcjach
             if (state == GameState::OptionsMenu) {
                 musicSlider.handleEvent(e, window);
                 sfxSlider.handleEvent(e, window);
             }
         }
 
-        // Aktualizacja stanu gry
+        // Aktualizacje
         if (state == GameState::Playing) {
-            // 8.1 Aktualizacja zegara i etykiety czasu
+            // czas gry
             sf::Time elapsed = gameClock.getElapsedTime();
-            int minutes = elapsed.asSeconds() / 60;
-            int seconds = static_cast<int>(elapsed.asSeconds()) % 60;
+            int min = elapsed.asSeconds() / 60;
+            int sec = int(elapsed.asSeconds()) % 60;
             std::ostringstream oss;
-            oss << "Czas: " << minutes << ":"
-                << std::setw(2) << std::setfill('0') << seconds;
-            labelTime.setString(oss.str());
+            oss << min<<":"<<std::setw(2)<<std::setfill('0')<<sec;
+            labelTime.setString("Czas gry: "+oss.str());
+            // aktualizacja wartości
+            moneyValue.setString(std::to_string(currentMoney)+"$");
+            energyValue.setString(std::to_string(currentEnergy)+"/"+std::to_string(maxEnergy));
+            envValue.setString(std::to_string(environmentHealth)+"%");
+
         }
 
         // Rysowanie
@@ -238,31 +274,45 @@ int main() {
         if (state == GameState::MainMenu) {
             window.draw(menuSprite);
         }
+        else if (state == GameState::EnterSaveName) {
+            // ramka i input
+            sf::RectangleShape box({600.f,200.f});
+            box.setFillColor({200,200,200,220});
+            box.setPosition(300.f, 280.f);
+            window.draw(box);
+            window.draw(inputPrompt);
+            window.draw(inputText);
+        }
+        else if (state == GameState::LoadMenu) {
+            // ramka + lista
+            sf::RectangleShape box({600.f,400.f});
+            box.setFillColor({200,200,200,220});
+            box.setPosition(300.f, 240.f);
+            window.draw(box);
+            window.draw(loadListTitle);
+            for (size_t i=0; i<saves.size(); ++i) {
+                sf::Text t(saves[i], gameFont, 24);
+                t.setFillColor(brown);
+                t.setPosition(350.f, 330.f+float(i)*30.f);
+                window.draw(t);
+            }
+        }
         else if (state == GameState::OptionsMenu) {
             window.draw(optsSprite);
             musicSlider.draw(window);
             sfxSlider.draw(window);
         }
         else if (state == GameState::Playing) {
-            // 9.1 Rysujemy tło (pełne 1200×800, z górnym i dolnym paskiem)
             gameBg.draw(window);
-
-            // 9.2 Rysujemy dolne etykiety
             window.draw(labelMoney);
             window.draw(labelEnergy);
             window.draw(labelEnvironment);
             window.draw(labelTime);
-
             window.draw(moneyValue);
             window.draw(energyValue);
             window.draw(envValue);
-
-            // 9.3 Rysujemy BuildMenu, jeśli młotek wciśnięty
-            if (buildMenu.isVisible()) {
-                buildMenu.draw(window);
-            }
+            if (hammerPressed) buildMenu.draw(window);
         }
-
         // (opcjonalnie) rysowanie ramki dla debugowania
         sf::RectangleShape debugRect;
         debugRect.setOutlineColor(sf::Color::Red);
@@ -271,12 +321,12 @@ int main() {
 
         // odkomentuj, by zobaczyć hotspoty:
 
-        debugRect.setPosition(hotSave.left, hotSave.top);
+        /*debugRect.setPosition(hotSave.left, hotSave.top);
         debugRect.setSize({hotSave.width, hotSave.height});
         window.draw(debugRect);
         debugRect.setPosition(hotCancel.left, hotCancel.top);
         debugRect.setSize({hotCancel.width, hotCancel.height});
-        window.draw(debugRect);
+        window.draw(debugRect);*/
 
         debugRect.setPosition(hotNew.left, hotNew.top);
         debugRect.setSize({hotNew.width, hotNew.height});
@@ -287,10 +337,13 @@ int main() {
         debugRect.setPosition(hotExit.left, hotExit.top);
         debugRect.setSize({hotExit.width, hotExit.height});
         window.draw(debugRect);
-
-        debugRect.setPosition(hammerHotspot.left, hammerHotspot.top);
-        debugRect.setSize({hammerHotspot.width, hammerHotspot.height});
+        debugRect.setPosition(hotLoad.left, hotLoad.top);
+        debugRect.setSize({hotLoad.width, hotLoad.height});
         window.draw(debugRect);
+
+        /*debugRect.setPosition(hammerHotspot.left, hammerHotspot.top);
+        debugRect.setSize({hammerHotspot.width, hammerHotspot.height});
+        window.draw(debugRect);*/
 
         window.display();
     }
