@@ -1,352 +1,164 @@
 #include <SFML/Graphics.hpp>
-#include <SFML/Window.hpp>
 #include <iostream>
-#include <iomanip>
-#include <sstream>
-#include <string>
 #include <vector>
+#include <string>
+#include <cmath>
 
 #include "Theme.h"
 #include "OptionsTheme.h"
 #include "Slider.h"
-#include "GameBackground.h"
-#include "BuildMenu.h"
 #include "SaveManager.h"
-
-enum class GameState {
-    MainMenu,
-    EnterSaveName,  // NOWY: wpisywanie nazwy przy „Nowa gra”
-    LoadMenu,       // wybór zapisu do wczytania
-    OptionsMenu,
-    Playing,
-};
+#include "Game.h"
 
 int main() {
     const unsigned WIN_W = 1200, WIN_H = 800;
-    sf::RenderWindow window(
-        sf::VideoMode(WIN_W, WIN_H),
-        "Eco Tycoon",
-        sf::Style::Titlebar | sf::Style::Close
-        );
+    sf::RenderWindow window({WIN_W, WIN_H}, "Eco Tycoon", sf::Style::Titlebar | sf::Style::Close);
     window.setVerticalSyncEnabled(true);
 
-    // --- Czcionka ---
     sf::Font gameFont;
     if (!gameFont.loadFromFile("images/Quicksand-VariableFont_wght.ttf")) {
-        std::cerr << "Nie można wczytać czcionki\n";
+        std::cerr << "Nie można wczytać czcionki\n"; return -1;
+    }
+
+    std::vector<sf::Texture> buildingTextures(3);
+    if (!buildingTextures[0].loadFromFile("images/eco_storage.png") ||
+        !buildingTextures[1].loadFromFile("images/eco_solar.jpg") ||
+        !buildingTextures[2].loadFromFile("images/eco_turbine.jpg")) {
+        std::cerr << "Nie mozna wczytac tekstur budynkow\n"; return -1;
+    }
+
+    sf::Texture menuTex, optsTex, saveDialogTex, loadDialogTex;
+    if (!menuTex.loadFromFile("images/eco_tycoon_menu.png") || !optsTex.loadFromFile(OPTIONS_THEME.backgroundImagePath) ||
+        !saveDialogTex.loadFromFile("images/eco_tycoon_save.png") || !loadDialogTex.loadFromFile("images/eco_tycoon_load.png")) {
         return -1;
     }
 
-    // --- Zasoby gry ---
-    float currentMoney      = 1000.f;
-    float currentEnergy     = 0.f;
-    float maxEnergy         = 100.f;
-    float environmentHealth = 100.f;
+    sf::Sprite menuSprite(menuTex), optsSprite(optsTex), saveDialogSprite(saveDialogTex), loadDialogSprite(loadDialogTex);
+    sf::Vector2u windowSize = window.getSize();
+    auto scaleSpriteToWindow = [&](sf::Sprite& sprite){
+        sprite.setScale(windowSize.x / float(sprite.getTexture()->getSize().x), windowSize.y / float(sprite.getTexture()->getSize().y));
+    };
+    scaleSpriteToWindow(menuSprite); scaleSpriteToWindow(optsSprite); scaleSpriteToWindow(saveDialogSprite); scaleSpriteToWindow(loadDialogSprite);
 
-    // --- 1) Menu główne ---
-    sf::Texture menuTex;
-    if (!menuTex.loadFromFile("images/eco_tycoon_menu.png")) {
-        std::cerr << "Błąd: nie można wczytać eco_tycoon_menu.png\n";
-        return -1;
-    }
-    sf::Sprite menuSprite(menuTex);
-    {
-        auto [mw, mh] = menuTex.getSize();
-        menuSprite.setScale(WIN_W / float(mw), WIN_H / float(mh));
-    }
+    Slider musicSlider((WIN_W - OPTIONS_THEME.sliderWidth)/2.f, OPTIONS_THEME.sliderMusicY, OPTIONS_THEME.sliderWidth, OPTIONS_THEME.sliderHeight, OPTIONS_THEME.thumbRadius);
+    Slider sfxSlider((WIN_W - OPTIONS_THEME.sliderWidth)/2.f, OPTIONS_THEME.sliderSfxY, OPTIONS_THEME.sliderWidth, OPTIONS_THEME.sliderHeight, OPTIONS_THEME.thumbRadius);
 
-    float btnW = MAIN_MENU_THEME.button.size.width;
-    float btnH = MAIN_MENU_THEME.button.size.height;
-    float btnX = (WIN_W - btnW) / 2.f - 10.f;
-    sf::FloatRect hotNew  (btnX, 353.f, btnW + 18.f, btnH);
-    sf::FloatRect hotLoad (btnX, 455.f, btnW + 18.f, btnH);
-    sf::FloatRect hotOpt  (btnX, 560.f, btnW + 18.f, btnH);
-    sf::FloatRect hotExit (btnX, 660.f, btnW + 18.f, btnH);
+    Game game(gameFont, buildingTextures);
 
-    // --- 2) Menu opcji ---
-    sf::Texture optsTex;
-    optsTex.loadFromFile(OPTIONS_THEME.backgroundImagePath);
-    sf::Sprite optsSprite(optsTex);
-    {
-        auto [ow, oh] = optsTex.getSize();
-        optsSprite.setScale(WIN_W / float(ow), WIN_H / float(oh));
-    }
-    float optBW = OPTIONS_THEME.saveButton.size.width;
-    float optBH = OPTIONS_THEME.saveButton.size.height;
-    float optX  = (WIN_W - optBW) / 2.f;
-    sf::FloatRect hotSave   (optX - 140.f, OPTIONS_THEME.saveButtonY,  optBW, optBH);
-    sf::FloatRect hotCancel (optX + 140.f, OPTIONS_THEME.cancelButtonY, optBW, optBH);
+    sf::RectangleShape pauseOverlay({(float)WIN_W, (float)WIN_H}); pauseOverlay.setFillColor({0, 0, 0, 150});
+    sf::Text pauseTitle("Pauza", gameFont, 60); pauseTitle.setFillColor(sf::Color::White); pauseTitle.setPosition((WIN_W - pauseTitle.getLocalBounds().width)/2.f, 200.f);
+    sf::Text pauseResume("Wznow gre (P)", gameFont, 32); pauseResume.setFillColor(sf::Color::White); pauseResume.setPosition((WIN_W - pauseResume.getLocalBounds().width)/2.f, 350.f);
+    sf::FloatRect resumeHotspot = pauseResume.getGlobalBounds();
+    sf::Text pauseExit("Wyjdz do menu", gameFont, 32); pauseExit.setFillColor(sf::Color::White); pauseExit.setPosition((WIN_W - pauseExit.getLocalBounds().width)/2.f, 420.f);
+    sf::FloatRect exitHotspot = pauseExit.getGlobalBounds();
 
-    Slider musicSlider(
-        (WIN_W - OPTIONS_THEME.sliderWidth) / 2.f,
-        OPTIONS_THEME.sliderMusicY,
-        OPTIONS_THEME.sliderWidth,
-        OPTIONS_THEME.sliderHeight,
-        OPTIONS_THEME.thumbRadius
-        );
-    Slider sfxSlider(
-        (WIN_W - OPTIONS_THEME.sliderWidth) / 2.f,
-        OPTIONS_THEME.sliderSfxY,
-        OPTIONS_THEME.sliderWidth,
-        OPTIONS_THEME.sliderHeight,
-        OPTIONS_THEME.thumbRadius
-        );
-    /*float backupMusic = musicSlider.getValue();
-    float backupSfx   = sfxSlider.getValue();*/
-
-    // --- 3) Tło gry ---
-    GameBackground gameBg;
-    gameBg.loadFromFile("images/eco_tycoon_game.png");
-
-    // --- 4) BuildMenu ---
-    BuildMenu buildMenu;
-    buildMenu.initialize(gameFont);
-    bool hammerPressed = false;
-    sf::FloatRect hammerHotspot(14.f, 18.f, 90.f, 90.f);
-
-    // --- 5) Napisy dolnego paska ---
-    sf::Color brown(101, 67, 33);
-    sf::Text labelMoney("Stan konta", gameFont, 24);
-    labelMoney.setFillColor(brown);
-    labelMoney.setPosition(77.f, 726.f);
-
-    sf::Text labelEnergy("Energia", gameFont, 24);
-    labelEnergy.setFillColor(brown);
-    labelEnergy.setPosition(390.f, 726.f);
-
-    sf::Text labelEnvironment("Stan srodowiska", gameFont, 24);
-    labelEnvironment.setFillColor(brown);
-    labelEnvironment.setPosition(654.f, 726.f);
-
-    sf::Text labelTime("Czas gry:", gameFont, 30);
-    labelTime.setFillColor(brown);
-    labelTime.setPosition(980.f, 744.f);
-
-    sf::Text moneyValue(std::to_string(currentMoney) + "$", gameFont, 24);
-    moneyValue.setFillColor(brown);
-    moneyValue.setPosition(77.f, 752.f);
-
-    sf::Text energyValue(std::to_string(currentEnergy) + "/" + std::to_string(maxEnergy), gameFont, 24);
-    energyValue.setFillColor(brown);
-    energyValue.setPosition(390.f, 752.f);
-
-    sf::Text envValue(std::to_string(environmentHealth) + "%", gameFont, 24);
-    envValue.setFillColor(brown);
-    envValue.setPosition(654.f, 752.f);
-
-    // --- 6) Wpisywanie nazwy nowego zapisu ---
-    std::string saveName;
-    sf::Text inputPrompt("Nazwa zapisu:", gameFont, 24);
-    inputPrompt.setFillColor(brown);
-    inputPrompt.setPosition(350.f, 300.f);
-    sf::Text inputText("", gameFont, 24);
-    inputText.setFillColor(brown);
-    inputText.setPosition(350.f, 350.f);
-
-    // --- 7) Ekran wyboru zapisu ---
+    std::string saveName, currentSaveName;
+    sf::Text inputPrompt("Nazwa zapisu:", gameFont, 34); inputPrompt.setFillColor({101, 67, 33}); inputPrompt.setPosition((WIN_W - inputPrompt.getLocalBounds().width) / 2.f, 186.f);
+    sf::Text inputText("", gameFont, 40); inputText.setFillColor({101, 67, 33});
+    sf::Clock cursorClock;
     std::vector<std::string> saves;
-    sf::Text loadListTitle("Wybierz zapis:", gameFont, 24);
-    loadListTitle.setFillColor(brown);
-    loadListTitle.setPosition(350.f, 280.f);
+    size_t selectedIndex = 0;
 
-    // --- 8) Stan gry i zegary ---
     GameState state = GameState::MainMenu;
-    sf::Clock gameClock;
     sf::Clock deltaClock;
 
     while (window.isOpen()) {
         sf::Event e;
         while (window.pollEvent(e)) {
-            // Zamknięcie
-            if (e.type == sf::Event::Closed) {
-                window.close();
-            }
+            if (e.type == sf::Event::Closed) window.close();
 
-            // TekstEntered dla wpisywania nazwy
-            if (state == GameState::EnterSaveName && e.type == sf::Event::TextEntered) {
-                if (e.text.unicode == '\r' || e.text.unicode == '\n') {
-                    // Enter → zapis
-                    if (!saveName.empty()) {
-                        SaveManager::saveGame(saveName,
-                                              currentMoney,
-                                              currentEnergy,
-                                              maxEnergy,
-                                              environmentHealth);
-                    }
+            switch (state) {
+            case GameState::Playing:
+            case GameState::EnergyMenu: // Zdarzenia dla gry i menu energii są obsługiwane w klasie Game
+                game.handleEvent(e, window, state);
+                break;
+            case GameState::PauseMenu:
+                if ((e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::P) ||
+                    (e.type == sf::Event::MouseButtonPressed && resumeHotspot.contains(window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y})))) {
                     state = GameState::Playing;
                 }
-                else if (e.text.unicode == 8) { // Backspace
-                    if (!saveName.empty()) saveName.pop_back();
+                if (e.type == sf::Event::MouseButtonPressed && exitHotspot.contains(window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y}))) {
+                    if (!currentSaveName.empty()) SaveManager::saveGame(currentSaveName, game);
+                    state = GameState::MainMenu;
                 }
-                else if (e.text.unicode < 128) {
-                    saveName.push_back(static_cast<char>(e.text.unicode));
+                break;
+            case GameState::MainMenu:
+                if (e.type == sf::Event::MouseButtonPressed) {
+                    sf::Vector2f pos = window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y});
+                    const auto& btn = MAIN_MENU_THEME.button;
+                    sf::FloatRect hotNew( (WIN_W - btn.size.width)/2.f, 353.f, btn.size.width, btn.size.height );
+                    sf::FloatRect hotLoad(hotNew.left, hotNew.top + btn.size.height + 20.f, hotNew.width, hotNew.height);
+                    sf::FloatRect hotOpt(hotNew.left, hotLoad.top + btn.size.height + 20.f, hotNew.width, hotNew.height);
+                    sf::FloatRect hotExit(hotNew.left, hotOpt.top + btn.size.height + 20.f, hotNew.width, hotNew.height);
+                    if (hotNew.contains(pos)) { game.reset(); saveName.clear(); currentSaveName = ""; inputText.setString(""); cursorClock.restart(); state = GameState::EnterSaveName; }
+                    else if (hotLoad.contains(pos)) { saves = SaveManager::listSaves(); selectedIndex = 0; state = GameState::LoadMenu; }
+                    else if (hotOpt.contains(pos)) { state = GameState::OptionsMenu; }
+                    else if (hotExit.contains(pos)) { window.close(); }
                 }
-                inputText.setString(saveName);
-            }
-
-            // Kliknięcia w menu…
-            if (e.type == sf::Event::MouseButtonPressed &&
-                e.mouseButton.button == sf::Mouse::Left)
-            {
-                sf::Vector2f pos = window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y});
-
-                if (state == GameState::MainMenu) {
-                    if (hotNew.contains(pos)) {
-                        // Nowa gra → wpisujemy nazwę
-                        saveName.clear();
-                        inputText.setString("");
-                        state = GameState::EnterSaveName;
-                    }
-                    else if (hotLoad.contains(pos)) {
-                        // Wczytaj grę → pobieramy listę i przechodzimy
-                        saves = SaveManager::listSaves();
-                        state = GameState::LoadMenu;
-                    }
-                    else if (hotOpt.contains(pos)) {
-                        state = GameState::OptionsMenu;
-                    }
-                    else if (hotExit.contains(pos)) {
-                        window.close();
+                break;
+            case GameState::LoadMenu:
+                if (e.type == sf::Event::KeyPressed) {
+                    if (e.key.code == sf::Keyboard::Escape) state = GameState::MainMenu;
+                    else if (e.key.code == sf::Keyboard::Up && selectedIndex > 0) --selectedIndex;
+                    else if (e.key.code == sf::Keyboard::Down && selectedIndex + 1 < saves.size()) ++selectedIndex;
+                    else if (e.key.code == sf::Keyboard::Enter && !saves.empty()) {
+                        currentSaveName = saves[selectedIndex];
+                        if (SaveManager::loadGame(currentSaveName, game, &buildingTextures)) state = GameState::Playing;
+                        else { std::cerr << "Wczytywanie nie powiodlo sie.\n"; currentSaveName = ""; }
                     }
                 }
-                else if (state == GameState::LoadMenu) {
-                    // Klik w któryś zapis
-                    for (size_t i = 0; i < saves.size(); ++i) {
-                        float y0 = 330.f + float(i)*30.f;
-                        sf::FloatRect r(350.f, y0, 500.f, 28.f);
-                        if (r.contains(pos)) {
-                            SaveManager::loadGame(saves[i],
-                                                  currentMoney,
-                                                  currentEnergy,
-                                                  maxEnergy,
-                                                  environmentHealth);
-                            state = GameState::Playing;
-                        }
-                    }
+                break;
+            case GameState::EnterSaveName:
+                if (e.type == sf::Event::TextEntered) {
+                    if (e.text.unicode == '\r' || e.text.unicode == '\n') {
+                        if (!saveName.empty()) { currentSaveName = saveName; SaveManager::saveGame(currentSaveName, game); }
+                        state = GameState::Playing;
+                    } else if (e.text.unicode == 8 && !saveName.empty()) saveName.pop_back();
+                    else if (e.text.unicode >= 32 && e.text.unicode < 128) saveName.push_back(static_cast<char>(e.text.unicode));
+                    inputText.setString(saveName); inputText.setPosition((WIN_W - inputText.getLocalBounds().width) / 2.f, 290.f);
                 }
-                else if (state == GameState::OptionsMenu) {
-                    if (hotSave.contains(pos)) {
-                        // … jak wcześniej …
-                        state = GameState::MainMenu;
-                    }
-                    else if (hotCancel.contains(pos)) {
-                        // … jak wcześniej …
-                        state = GameState::MainMenu;
-                    }
-                }
-                else if (state == GameState::Playing) {
-                    if (hammerHotspot.contains(pos)) {
-                        hammerPressed = !hammerPressed;
-                        buildMenu.setVisible(hammerPressed);
-                    }
-                    if (buildMenu.isVisible()) {
-                        buildMenu.handleEvent(e, window, *(float*)&currentMoney);
-                    }
-                }
-            }
-
-            // suwaki w opcjach
-            if (state == GameState::OptionsMenu) {
-                musicSlider.handleEvent(e, window);
-                sfxSlider.handleEvent(e, window);
+                if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) state = GameState::MainMenu;
+                break;
+            case GameState::OptionsMenu:
+                musicSlider.handleEvent(e, window); sfxSlider.handleEvent(e, window);
+                break;
             }
         }
 
-        // Aktualizacje
+        // --- Aktualizacja logiki ---
         if (state == GameState::Playing) {
-            // czas gry
-            sf::Time elapsed = gameClock.getElapsedTime();
-            int min = elapsed.asSeconds() / 60;
-            int sec = int(elapsed.asSeconds()) % 60;
-            std::ostringstream oss;
-            oss << min<<":"<<std::setw(2)<<std::setfill('0')<<sec;
-            labelTime.setString("Czas gry: "+oss.str());
-            // aktualizacja wartości
-            moneyValue.setString(std::to_string(currentMoney)+"$");
-            energyValue.setString(std::to_string(currentEnergy)+"/"+std::to_string(maxEnergy));
-            envValue.setString(std::to_string(environmentHealth)+"%");
-
+            game.update(deltaClock.restart().asSeconds());
+        } else if (state == GameState::EnergyMenu) {
+            game.updateEnergyMenu();
         }
 
-        // Rysowanie
+        // --- Renderowanie ---
         window.clear();
-
-        if (state == GameState::MainMenu) {
-            window.draw(menuSprite);
-        }
-        else if (state == GameState::EnterSaveName) {
-            // ramka i input
-            sf::RectangleShape box({600.f,200.f});
-            box.setFillColor({200,200,200,220});
-            box.setPosition(300.f, 280.f);
-            window.draw(box);
-            window.draw(inputPrompt);
-            window.draw(inputText);
-        }
-        else if (state == GameState::LoadMenu) {
-            // ramka + lista
-            sf::RectangleShape box({600.f,400.f});
-            box.setFillColor({200,200,200,220});
-            box.setPosition(300.f, 240.f);
-            window.draw(box);
-            window.draw(loadListTitle);
-            for (size_t i=0; i<saves.size(); ++i) {
-                sf::Text t(saves[i], gameFont, 24);
-                t.setFillColor(brown);
-                t.setPosition(350.f, 330.f+float(i)*30.f);
-                window.draw(t);
+        switch (state) {
+        case GameState::Playing: game.draw(window); break;
+        case GameState::PauseMenu: game.drawForPause(window); window.draw(pauseOverlay); window.draw(pauseTitle); window.draw(pauseResume); window.draw(pauseExit); break;
+        case GameState::EnergyMenu: game.drawEnergyMenu(window); break;
+        // ... reszta renderowania menu pozostaje bez zmian
+        case GameState::MainMenu: window.draw(menuSprite); break;
+        case GameState::LoadMenu:
+            window.draw(loadDialogSprite);
+            {
+                float listAreaWidth = 482.f, listStartX = (WIN_W - listAreaWidth) / 2.f, listStartY = 270.f, lh = 40.f;
+                for (size_t i = 0; i < saves.size(); ++i) {
+                    if (i == selectedIndex) { sf::RectangleShape hl({listAreaWidth, lh - 4.f}); hl.setFillColor({170, 220, 170, 200}); hl.setPosition(listStartX, listStartY + i * lh - 2.f); window.draw(hl); }
+                    sf::Text entry(saves[i], gameFont, 22); entry.setFillColor(i == selectedIndex ? sf::Color::Black : sf::Color(101,67,33)); entry.setPosition(listStartX + 10.f, listStartY + i * lh); window.draw(entry);
+                }
             }
+            break;
+        case GameState::EnterSaveName:
+            window.draw(saveDialogSprite); window.draw(inputPrompt); window.draw(inputText);
+            if (fmod(cursorClock.getElapsedTime().asSeconds(), 1.f) < 0.5f) {
+                sf::RectangleShape cur({2.f, (float)inputText.getCharacterSize()}); cur.setFillColor({101, 67, 33}); cur.setPosition(inputText.getPosition().x + inputText.getLocalBounds().width + 2.f, inputText.getPosition().y + 8.f); window.draw(cur);
+            }
+            break;
+        case GameState::OptionsMenu: window.draw(optsSprite); musicSlider.draw(window); sfxSlider.draw(window); break;
         }
-        else if (state == GameState::OptionsMenu) {
-            window.draw(optsSprite);
-            musicSlider.draw(window);
-            sfxSlider.draw(window);
-        }
-        else if (state == GameState::Playing) {
-            gameBg.draw(window);
-            window.draw(labelMoney);
-            window.draw(labelEnergy);
-            window.draw(labelEnvironment);
-            window.draw(labelTime);
-            window.draw(moneyValue);
-            window.draw(energyValue);
-            window.draw(envValue);
-            if (hammerPressed) buildMenu.draw(window);
-        }
-        // (opcjonalnie) rysowanie ramki dla debugowania
-        sf::RectangleShape debugRect;
-        debugRect.setOutlineColor(sf::Color::Red);
-        debugRect.setFillColor(sf::Color::Transparent);
-        debugRect.setOutlineThickness(2.f);
-
-        // odkomentuj, by zobaczyć hotspoty:
-
-        /*debugRect.setPosition(hotSave.left, hotSave.top);
-        debugRect.setSize({hotSave.width, hotSave.height});
-        window.draw(debugRect);
-        debugRect.setPosition(hotCancel.left, hotCancel.top);
-        debugRect.setSize({hotCancel.width, hotCancel.height});
-        window.draw(debugRect);*/
-
-        debugRect.setPosition(hotNew.left, hotNew.top);
-        debugRect.setSize({hotNew.width, hotNew.height});
-        window.draw(debugRect);
-        debugRect.setPosition(hotOpt.left, hotOpt.top);
-        debugRect.setSize({hotOpt.width, hotOpt.height});
-        window.draw(debugRect);
-        debugRect.setPosition(hotExit.left, hotExit.top);
-        debugRect.setSize({hotExit.width, hotExit.height});
-        window.draw(debugRect);
-        debugRect.setPosition(hotLoad.left, hotLoad.top);
-        debugRect.setSize({hotLoad.width, hotLoad.height});
-        window.draw(debugRect);
-
-        /*debugRect.setPosition(hammerHotspot.left, hammerHotspot.top);
-        debugRect.setSize({hammerHotspot.width, hammerHotspot.height});
-        window.draw(debugRect);*/
-
         window.display();
     }
-
     return 0;
 }

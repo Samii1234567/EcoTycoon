@@ -1,29 +1,30 @@
-#pragma once
+#ifndef SAVEMANAGER_H
+#define SAVEMANAGER_H
 
 #include <string>
 #include <vector>
+#include <memory>
+#include <SFML/Graphics.hpp>
+#include "Building.h" // Potrzebujemy definicji Building
 
-// Zarządza katalogiem „saves/” i plikami zapisu
+// Zmodyfikowana struktura PlacedObject
+struct PlacedObject {
+    int typeId;
+    sf::Sprite sprite;
+    std::unique_ptr<Building> logic; // Używamy inteligentnego wskaźnika na bazową klasę
+};
+
+// Forward declaration
+class Game;
+
 class SaveManager {
 public:
-    // Katalog, w którym trzymamy pliki .save
     static inline const std::string SAVE_DIR = "saves/";
 
-    // Zapisuje pod nazwą `name` plik SAVE_DIR + name + ".save"
-    // Zawartość: four floats: money energy maxEnergy environmentHealth
-    static bool saveGame(const std::string& name,
-                         float money,
-                         float energy,
-                         float maxEnergy,
-                         float envHealth);
-
-    // Zwraca listę dostępnych nazw zapisów (bez rozszerzenia)
+    // Metody operują teraz na referencji do obiektu Game
+    static bool saveGame(const std::string& name, const Game& game);
     static std::vector<std::string> listSaves();
-
-    // Wczytuje zapis `name` do podanych referencji; zwraca false przy błędzie
-    static bool loadGame(const std::string& name,
-                         float& money,
-                         float& energy,
-                         float& maxEnergy,
-                         float& envHealth);
+    static bool loadGame(const std::string& name, Game& game, const std::vector<sf::Texture>* buildingTextures);
 };
+
+#endif // SAVEMANAGER_H
