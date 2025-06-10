@@ -1,5 +1,5 @@
 #include "Grid.h"
-#include "Constants.h" // Potrzebne dla stałych siatki
+#include "Constants.h"
 
 Grid::Grid() : m_cols(0), m_rows(0), m_cellSize(0) {}
 

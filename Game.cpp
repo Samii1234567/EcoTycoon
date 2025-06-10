@@ -5,6 +5,9 @@
 #include <sstream>
 #include <cmath>
 
+// Implementacja klasy BuildingTooltip została przeniesiona do Game.h
+// Implementacja klasy Grid została przeniesiona do Grid.cpp
+
 Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures)
     : m_font(font),
     m_buildingTextures(buildingTextures),
@@ -38,6 +41,8 @@ Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures)
     m_windTurbineSound.setBuffer(m_windTurbineBuffer);
     if (!m_energyStorageBuffer.loadFromFile("audio/energy_magazine.wav")) { std::cerr << "Nie mozna wczytac energy_magazine.wav\n"; }
     m_energyStorageSound.setBuffer(m_energyStorageBuffer);
+    if (!m_upgradeBuffer.loadFromFile("audio/upgrade_sound.wav")) { std::cerr << "Nie mozna wczytac upgrade_sound.wav\n"; }
+    m_upgradeSound.setBuffer(m_upgradeBuffer);
 
     const unsigned WIN_W = 1200, WIN_H = 800;
 
@@ -72,14 +77,13 @@ Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures)
     m_closeButtonText.setString("Zamknij"); m_closeButtonText.setFont(m_font); m_closeButtonText.setCharacterSize(24);
     m_closeButtonText.setPosition(m_closeButton.getPosition().x + (m_closeButton.getSize().x - m_closeButtonText.getLocalBounds().width)/2.f, m_closeButton.getPosition().y + 10.f);
 
+    m_tooltip.initialize(m_font);
+
     m_optionsPanel.setSize({500.f, 400.f});
     m_optionsPanel.setFillColor({40, 40, 60, 220});
-    m_optionsPanel.setOutlineColor({120, 120, 150, 255});
-    m_optionsPanel.setOutlineThickness(2.f);
     m_optionsPanel.setPosition((WIN_W - 500.f) / 2.f, (WIN_H - 400.f) / 2.f);
     m_optionsMenuTitle.setString("Opcje");
-    m_optionsMenuTitle.setFont(m_font); m_optionsMenuTitle.setCharacterSize(32);
-    m_optionsMenuTitle.setFillColor(sf::Color::White);
+    m_optionsMenuTitle.setFont(m_font); m_optionsMenuTitle.setCharacterSize(32); m_optionsMenuTitle.setFillColor(sf::Color::White);
     m_optionsMenuTitle.setPosition(m_optionsPanel.getPosition().x + (m_optionsPanel.getSize().x - m_optionsMenuTitle.getLocalBounds().width) / 2.f, m_optionsPanel.getPosition().y + 20.f);
     m_musicLabel.setString("Muzyka"); m_musicLabel.setFont(m_font); m_musicLabel.setCharacterSize(24); m_musicLabel.setFillColor(sf::Color::White);
     m_musicLabel.setPosition(m_optionsPanel.getPosition().x + 50.f, m_optionsPanel.getPosition().y + 100.f);
@@ -112,17 +116,48 @@ void Game::reset() {
     m_hammerPressed = false;
     m_demolishModeActive = false;
     m_isBuildMode = false;
+    m_hoveredBuilding = nullptr;
+    m_tooltip.hide();
     currentSaveName.clear();
     m_grid.initialize({0.f, 121.f}, GameConstants::GRID_COLS, GameConstants::GRID_ROWS, GameConstants::GRID_CELL_SIZE);
 }
 
 void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState& currentState, sf::Sound& clickSound) {
+    if (m_tooltip.isVisible() && !m_demolishModeActive) {
+        m_tooltip.handleEvent(ev, window);
+        if (m_tooltip.isUpgradeClicked() && m_hoveredBuilding) {
+            upgradeBuilding(*m_hoveredBuilding);
+        }
+    }
+
     if (currentState == GameState::Playing) {
         if (ev.type == sf::Event::KeyPressed) {
             if (ev.key.code == sf::Keyboard::P) { currentState = GameState::PauseMenu; return; }
             if (ev.key.code == sf::Keyboard::Escape) {
                 if (m_demolishModeActive) { m_demolishModeActive = false; }
                 if (m_isBuildMode) { m_buildMenu.cancelDragging(); m_isBuildMode = false; }
+            }
+        }
+
+        if (ev.type == sf::Event::MouseMoved) {
+            sf::Vector2f pos = window.mapPixelToCoords({ev.mouseMove.x, ev.mouseMove.y});
+
+            if (auto& drag = m_buildMenu.getDragState(); drag.has_value()) {
+                drag->sprite.setPosition(pos);
+            }
+            else if (!m_demolishModeActive) {
+                m_hoveredBuilding = nullptr;
+                for (auto& building : placedObjects) {
+                    if (building.sprite.getGlobalBounds().contains(pos)) {
+                        m_hoveredBuilding = &building;
+                        break;
+                    }
+                }
+                if (m_hoveredBuilding) {
+                    m_tooltip.show(*m_hoveredBuilding, currentMoney);
+                } else {
+                    m_tooltip.hide();
+                }
             }
         }
 
@@ -145,12 +180,18 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
             if (ev.type == sf::Event::MouseButtonPressed && ev.mouseButton.button == sf::Mouse::Left) {
                 sf::Vector2f pos = window.mapPixelToCoords({ev.mouseButton.x, ev.mouseButton.y});
 
-                if (m_demolishModeActive) {
+                // ZMIANA: Przebudowa logiki kliknięć
+                // 1. Kliknięcie na przycisk ulepszenia w tooltipie jest już obsłużone na górze funkcji
+                if (m_tooltip.isVisible() && m_tooltip.isUpgradeClicked()) {
+                    // Akcja już wykonana, nie rób nic więcej
+                }
+                // 2. Obsługa trybu burzenia
+                else if (m_demolishModeActive) {
                     for (auto it = placedObjects.begin(); it != placedObjects.end(); ++it) {
                         if (it->sprite.getGlobalBounds().contains(pos)) {
                             currentMoney += it->price / 2;
                             if (it->typeId == GameConstants::ENERGY_STORAGE_ID) {
-                                maxEnergy -= GameConstants::ENERGY_STORAGE_CAPACITY_INCREASE;
+                                maxEnergy -= GameConstants::STORAGE_DATA.value[it->level - 1];
                                 if (currentEnergy > maxEnergy) currentEnergy = maxEnergy;
                             }
                             m_grid.freeArea(it->gridPosition, it->sizeInCells);
@@ -160,13 +201,14 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
                             break;
                         }
                     }
-                } else {
+                }
+                // 3. Obsługa przycisków UI i kliknięć na budynki
+                else {
                     bool uiClicked = false;
                     if (m_hammerHotspot.contains(pos)) {
                         clickSound.play();
                         m_hammerPressed = !m_hammerPressed;
                         m_buildMenu.setVisible(m_hammerPressed);
-                        if (m_demolishModeActive) m_demolishModeActive = false;
                         uiClicked = true;
                     } else if (m_demolishHotspot.contains(pos)) {
                         clickSound.play();
@@ -189,13 +231,17 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
                         uiClicked = true;
                     }
 
+                    // Jeśli nie kliknięto żadnego przycisku UI, sprawdź kliknięcie na budynek
                     if (!uiClicked) {
                         for (auto it = placedObjects.rbegin(); it != placedObjects.rend(); ++it) {
                             if (it->sprite.getGlobalBounds().contains(pos)) {
-                                switch (it->typeId) {
-                                case GameConstants::SOLAR_PANEL_ID: m_solarPanelSound.play(); break;
-                                case GameConstants::WIND_TURBINE_ID: m_windTurbineSound.play(); break;
-                                case GameConstants::ENERGY_STORAGE_ID: m_energyStorageSound.play(); break;
+                                // Odtwarzaj dźwięk tylko jeśli tooltip nie jest widoczny LUB jeśli kliknięcie nie było na jego przycisku
+                                if (!m_tooltip.isVisible() || !m_tooltip.isUpgradeClicked()) {
+                                    switch (it->typeId) {
+                                    case GameConstants::SOLAR_PANEL_ID: m_solarPanelSound.play(); break;
+                                    case GameConstants::WIND_TURBINE_ID: m_windTurbineSound.play(); break;
+                                    case GameConstants::ENERGY_STORAGE_ID: m_energyStorageSound.play(); break;
+                                    }
                                 }
                                 break;
                             }
@@ -205,12 +251,6 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
             }
             if (m_buildMenu.isVisible()) {
                 m_buildMenu.handleEvent(ev, window, currentMoney);
-            }
-        }
-
-        if (ev.type == sf::Event::MouseMoved) {
-            if (auto& drag = m_buildMenu.getDragState(); drag.has_value()) {
-                drag->sprite.setPosition(window.mapPixelToCoords({ev.mouseMove.x, ev.mouseMove.y}));
             }
         }
     }
@@ -223,7 +263,7 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
             sf::Vector2f pos = window.mapPixelToCoords({ev.mouseButton.x, ev.mouseButton.y});
             if (m_sellButton.getGlobalBounds().contains(pos)) {
                 clickSound.play();
-                currentMoney += static_cast<int>(currentEnergy * GameConstants::ENERGY_SELL_PRICE);
+                currentMoney += currentEnergy * GameConstants::ENERGY_SELL_PRICE;
                 currentEnergy = 0;
                 currentState = GameState::Playing;
             } else if (m_closeButton.getGlobalBounds().contains(pos)) {
@@ -261,11 +301,43 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
     }
 }
 
+void Game::upgradeBuilding(PlacedObject& building) {
+    if (building.level >= GameConstants::MAX_LEVEL) return;
+
+    int cost = 0;
+    const GameConstants::BuildingLevelData* data = nullptr;
+
+    switch (building.typeId) {
+    case GameConstants::SOLAR_PANEL_ID: data = &GameConstants::SOLAR_PANEL_DATA; break;
+    case GameConstants::WIND_TURBINE_ID: data = &GameConstants::WIND_TURBINE_DATA; break;
+    case GameConstants::ENERGY_STORAGE_ID: data = &GameConstants::STORAGE_DATA; break;
+    }
+
+    if(data) {
+        cost = data->upgradeCost[building.level];
+    }
+
+    if (currentMoney >= cost) {
+        currentMoney -= cost;
+
+        if (building.typeId == GameConstants::ENERGY_STORAGE_ID) {
+            maxEnergy -= GameConstants::STORAGE_DATA.value[building.level - 1];
+            maxEnergy += GameConstants::STORAGE_DATA.value[building.level];
+        }
+
+        building.level++;
+        m_upgradeSound.play();
+        m_tooltip.show(building, currentMoney);
+    } else {
+        std::cout << "Za malo pieniedzy na ulepszenie!\n";
+    }
+}
+
 void Game::update(float dt) {
     totalGameTimeSeconds += dt;
     for (auto& obj : placedObjects) {
         if(obj.logic) {
-            obj.logic->update(dt, *this);
+            obj.logic->update(dt, *this, obj);
             sf::IntRect textureRect = obj.logic->getTextureRect();
             if (textureRect.width != 0) {
                 obj.sprite.setTextureRect(textureRect);
@@ -276,9 +348,12 @@ void Game::update(float dt) {
     if (m_demolishModeActive) m_bulldozerSprite.setColor(sf::Color(180, 255, 180));
     else m_bulldozerSprite.setColor(sf::Color::White);
 
-    m_solarPanelSound.setVolume(this->sfxVolume * 100.f);
-    m_windTurbineSound.setVolume(this->sfxVolume * 100.f);
-    m_energyStorageSound.setVolume(this->sfxVolume * 100.f);
+    // ZMIANA: Ściszenie dźwięków budynków
+    float buildingSoundVolume = (this->sfxVolume * 100.f) / 2.f;
+    m_solarPanelSound.setVolume(buildingSoundVolume);
+    m_windTurbineSound.setVolume(buildingSoundVolume);
+    m_energyStorageSound.setVolume(buildingSoundVolume);
+    m_upgradeSound.setVolume(this->sfxVolume * 100.f);
 
     if (currentEnergy > maxEnergy) currentEnergy = maxEnergy;
     if (environmentHealth > 100.f) environmentHealth = 100.f;
@@ -312,6 +387,7 @@ void Game::draw(sf::RenderWindow& window) {
     if (m_demolishModeActive) {
         window.draw(m_demolishCancelText);
     }
+    m_tooltip.draw(window);
 }
 
 void Game::drawForPause(sf::RenderWindow& window) {
@@ -331,6 +407,7 @@ void Game::placeBuilding(int typeId, int price, sf::Vector2f position, bool from
     newObj.typeId = typeId;
     newObj.logic = createBuildingById(typeId);
     newObj.price = price;
+    newObj.level = 1;
     newObj.gridPosition = gridPos;
     newObj.sizeInCells = buildingSize;
 
@@ -355,7 +432,7 @@ void Game::placeBuilding(int typeId, int price, sf::Vector2f position, bool from
     if (fromPlayerAction) {
         currentMoney -= price;
         if (typeId == GameConstants::ENERGY_STORAGE_ID) {
-            maxEnergy += GameConstants::ENERGY_STORAGE_CAPACITY_INCREASE;
+            maxEnergy += GameConstants::STORAGE_DATA.value[0];
         }
     }
 
@@ -369,7 +446,7 @@ void Game::updateEnergyMenu() {
     m_energyInfoText.setString(oss.str());
     oss.str("");
     oss.clear();
-    oss << "Wartosc sprzedazy: " << std::fixed << std::setprecision(2) << (currentEnergy * GameConstants::ENERGY_SELL_PRICE) << "$";
+    oss << "Wartosc sprzedazy: " << (currentEnergy * GameConstants::ENERGY_SELL_PRICE) << "$";
     m_energyValueText.setString(oss.str());
 }
 

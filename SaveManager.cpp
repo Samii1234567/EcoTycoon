@@ -7,8 +7,6 @@
 
 namespace fs = std::filesystem;
 
-sf::Vector2i getBuildingSize(int typeId);
-
 bool SaveManager::saveGame(const std::string& name, const Game& game) {
     fs::create_directories(SAVE_DIR);
     std::string path = SAVE_DIR + name + ".save";
@@ -29,7 +27,8 @@ bool SaveManager::saveGame(const std::string& name, const Game& game) {
         ofs << obj.typeId << " "
             << obj.gridPosition.x << " "
             << obj.gridPosition.y << " "
-            << obj.price << "\n";
+            << obj.price << " "
+            << obj.level << "\n";
     }
     return true;
 }
@@ -50,10 +49,7 @@ bool SaveManager::loadGame(const std::string& name, Game& game, const std::vecto
 
     std::string path = SAVE_DIR + name + ".save";
     std::ifstream ifs(path);
-    if (!ifs) {
-        std::cerr << "Nie można otworzyć pliku do odczytu: " << path << "\n";
-        return false;
-    }
+    if (!ifs) { return false; }
 
     game.reset();
 
@@ -65,16 +61,17 @@ bool SaveManager::loadGame(const std::string& name, Game& game, const std::vecto
     if (!ifs) return false;
 
     for (size_t i = 0; i < numObjects; ++i) {
-        int typeId;
-        int gridX, gridY;
-        int price; // ZMIANA: float -> int
-        ifs >> typeId >> gridX >> gridY >> price;
+        int typeId, gridX, gridY, price, level;
+        ifs >> typeId >> gridX >> gridY >> price >> level;
         if (!ifs) { game.placedObjects.clear(); return false; }
 
         sf::Vector2i gridPos = {gridX, gridY};
         sf::Vector2f worldPos = game.getGrid().gridToWorldCoords(gridPos);
 
         game.placeBuilding(typeId, price, worldPos, false);
+        if (!game.placedObjects.empty()) {
+            game.placedObjects.back().level = level;
+        }
     }
     game.currentSaveName = name;
     return true;
