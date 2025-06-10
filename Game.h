@@ -13,25 +13,7 @@
 #include "GameState.h"
 #include "Slider.h"
 #include "Building.h"
-
-class Grid {
-public:
-    Grid();
-    void initialize(sf::Vector2f position, int cols, int rows, float cellSize);
-    sf::Vector2i worldToGridCoords(sf::Vector2f worldPosition) const;
-    sf::Vector2f gridToWorldCoords(sf::Vector2i gridPosition) const;
-    bool isAreaFree(sf::Vector2i gridPosition, sf::Vector2i size) const;
-    void occupyArea(sf::Vector2i gridPosition, sf::Vector2i size);
-    void freeArea(sf::Vector2i gridPosition, sf::Vector2i size);
-    void draw(sf::RenderWindow& window, sf::Vector2f mousePosition, sf::Vector2i buildingSize);
-private:
-    sf::Vector2f m_position;
-    int m_cols, m_rows;
-    float m_cellSize;
-    std::vector<std::vector<bool>> m_occupiedCells;
-    sf::RectangleShape m_gridLine;
-    sf::RectangleShape m_highlightCell;
-};
+#include "Grid.h" // ZMIANA: Dołączenie nowego pliku nagłówkowego
 
 struct PlacedObject {
     int typeId;
@@ -75,7 +57,7 @@ private:
     GameBackground m_gameBg;
     BuildMenu m_buildMenu;
     HUD m_hud;
-    Grid m_grid;
+    Grid m_grid; // ZMIANA: Usunięto stąd definicję klasy, zostaje tylko pole
 
     sf::Texture m_grassTexture;
     sf::RectangleShape m_grassArea;
