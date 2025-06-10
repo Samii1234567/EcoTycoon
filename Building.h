@@ -2,39 +2,53 @@
 #define BUILDING_H
 
 #include <SFML/Graphics.hpp>
+#include <memory>
+#include <iostream>
+#include "Constants.h"
 
-// Forward declaration, aby uniknąć cyklicznej zależności z Game.h.
-// Oznacza to "obiecuję, że klasa Game istnieje", pełna definicja
-// zostanie dołączona w pliku .cpp.
 class Game;
 
-// Klasa bazowa dla wszystkich budynków
 class Building {
 public:
+    Building() = default;
     virtual ~Building() = default;
-
-    // Metoda aktualizująca logikę budynku w każdej klatce.
-    // Jest "czysto wirtualna" (= 0), co oznacza, że każda klasa
-    // pochodna MUSI ją zaimplementować.
     virtual void update(float dt, Game& game) = 0;
+    virtual sf::IntRect getTextureRect() const { return {}; }
 };
 
-// Magazyn energii - jego efekt jest natychmiastowy przy budowie, więc update() jest puste
 class EnergyStorage : public Building {
 public:
     void update(float dt, Game& game) override;
 };
 
-// Panele słoneczne - na razie bez logiki
 class SolarPanel : public Building {
 public:
     void update(float dt, Game& game) override;
 };
 
-// Turbina wiatrowa - generuje energię i poprawia środowisko
 class WindTurbine : public Building {
 public:
+    WindTurbine();
     void update(float dt, Game& game) override;
+    sf::IntRect getTextureRect() const override;
+private:
+    sf::Clock m_animClock;
+    int m_currentFrame;
 };
+
+// ZMIANA: Przeniesienie funkcji fabrykującej do pliku nagłówkowego jako inline
+inline std::unique_ptr<Building> createBuildingById(int typeId) {
+    switch (typeId) {
+    case GameConstants::ENERGY_STORAGE_ID:
+        return std::make_unique<EnergyStorage>();
+    case GameConstants::SOLAR_PANEL_ID:
+        return std::make_unique<SolarPanel>();
+    case GameConstants::WIND_TURBINE_ID:
+        return std::make_unique<WindTurbine>();
+    default:
+        std::cerr << "Nieznane ID budynku podczas tworzenia: " << typeId << std::endl;
+        return nullptr;
+    }
+}
 
 #endif // BUILDING_H

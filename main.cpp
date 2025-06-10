@@ -21,20 +21,17 @@ int main() {
         std::cerr << "Nie można wczytać czcionki\n"; return -1;
     }
 
-    // --- Ładowanie audio ---
     sf::Music menuMusic;
     if (!menuMusic.openFromFile("audio/main_menu_music.ogg")) {
         std::cerr << "Nie mozna wczytac pliku audio/main_menu_music.ogg\n";
     }
     menuMusic.setLoop(true);
 
-    // ZMIANA: Dodanie obiektu muzyki dla gry
     sf::Music gameMusic;
     if (!gameMusic.openFromFile("audio/game_music.ogg")) {
         std::cerr << "Nie mozna wczytac pliku audio/game_music.ogg\n";
     }
     gameMusic.setLoop(true);
-
 
     sf::SoundBuffer buttonClickBuffer;
     if (!buttonClickBuffer.loadFromFile("audio/button_click.wav")) {
@@ -42,7 +39,6 @@ int main() {
     }
     sf::Sound buttonClickSound;
     buttonClickSound.setBuffer(buttonClickBuffer);
-
 
     std::vector<sf::Texture> buildingTextures(3);
     if (!buildingTextures[0].loadFromFile("images/eco_storage.png") ||
@@ -87,11 +83,6 @@ int main() {
     GameState state = GameState::MainMenu;
     sf::Clock deltaClock;
 
-    float savedMusicValue = 0.5f;
-    float savedSfxValue = 0.5f;
-    musicSlider.setValue(savedMusicValue);
-    sfxSlider.setValue(savedSfxValue);
-
     while (window.isOpen()) {
         if (showSavedText && savedTextClock.getElapsedTime().asSeconds() > 1.5f) {
             showSavedText = false;
@@ -100,7 +91,6 @@ int main() {
             pauseSave.setFillColor(sf::Color::White);
         }
 
-        // --- ZMIANA: Zarządzanie dwiema ścieżkami muzycznymi ---
         bool shouldMenuMusicBePlaying = false;
         bool shouldGameMusicBePlaying = false;
 
@@ -120,25 +110,22 @@ int main() {
             break;
         }
 
-        // Logika dla muzyki w menu
         if (shouldMenuMusicBePlaying && menuMusic.getStatus() != sf::Music::Playing) {
             menuMusic.play();
         } else if (!shouldMenuMusicBePlaying && menuMusic.getStatus() == sf::Music::Playing) {
             menuMusic.stop();
         }
 
-        // Logika dla muzyki w grze
         if (shouldGameMusicBePlaying && gameMusic.getStatus() != sf::Music::Playing) {
             gameMusic.play();
         } else if (!shouldGameMusicBePlaying && gameMusic.getStatus() == sf::Music::Playing) {
             gameMusic.stop();
         }
 
-        // Ustawianie głośności dla obu ścieżek
-        menuMusic.setVolume(savedMusicValue * 100.f);
-        gameMusic.setVolume(savedMusicValue * 100.f);
-        buttonClickSound.setVolume(savedSfxValue * 100.f);
-
+        // ZMIANA: Głośność jest pobierana z obiektu 'game'
+        menuMusic.setVolume(game.musicVolume * 100.f);
+        gameMusic.setVolume(game.musicVolume * 100.f);
+        buttonClickSound.setVolume(game.sfxVolume * 100.f);
 
         sf::Event e;
         while (window.pollEvent(e)) {
@@ -148,14 +135,17 @@ int main() {
             case GameState::Playing:
             case GameState::EnergyMenu:
             case GameState::InGameOptionsMenu:
-                game.handleEvent(e, window, state);
+                // ZMIANA: Przekazanie obiektu dźwięku do handlera w klasie Game
+                game.handleEvent(e, window, state, buttonClickSound);
                 break;
             case GameState::PauseMenu:
                 if (e.type == sf::Event::MouseButtonPressed) {
                     sf::Vector2f pos = window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y});
                     if (pauseResume.getGlobalBounds().contains(pos)) {
+                        buttonClickSound.play();
                         state = GameState::Playing;
                     } else if (pauseSave.getGlobalBounds().contains(pos) && !showSavedText) {
+                        buttonClickSound.play();
                         if (!currentSaveName.empty()) {
                             if(SaveManager::saveGame(currentSaveName, game)) {
                                 pauseSave.setString("Zapisano!");
@@ -172,6 +162,7 @@ int main() {
                             showSavedText = true;
                         }
                     } else if (pauseExit.getGlobalBounds().contains(pos)) {
+                        buttonClickSound.play();
                         if (!currentSaveName.empty()) SaveManager::saveGame(currentSaveName, game);
                         state = GameState::MainMenu;
                     }
@@ -206,6 +197,9 @@ int main() {
                     }
                     else if (hotOpt.contains(pos)) {
                         buttonClickSound.play();
+                        // ZMIANA: Ustawienie suwaków na aktualne wartości z obiektu 'game'
+                        musicSlider.setValue(game.musicVolume);
+                        sfxSlider.setValue(game.sfxVolume);
                         state = GameState::OptionsMenu;
                     }
                     else if (hotExit.contains(pos)) {
@@ -259,21 +253,17 @@ int main() {
 
                     if (saveHotspot.contains(pos)) {
                         buttonClickSound.play();
-                        savedMusicValue = musicSlider.getValue();
-                        savedSfxValue = sfxSlider.getValue();
+                        // ZMIANA: Zapisz wartości do obiektu 'game'
+                        game.musicVolume = musicSlider.getValue();
+                        game.sfxVolume = sfxSlider.getValue();
                         std::cout << "Ustawienia zapisane!\n";
                         state = GameState::MainMenu;
                     } else if (cancelHotspot.contains(pos)) {
                         buttonClickSound.play();
-                        musicSlider.setValue(savedMusicValue);
-                        sfxSlider.setValue(savedSfxValue);
-                        std::cout << "Anulowano zmiane ustawien.\n";
                         state = GameState::MainMenu;
                     }
                 }
                 if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) {
-                    musicSlider.setValue(savedMusicValue);
-                    sfxSlider.setValue(savedSfxValue);
                     state = GameState::MainMenu;
                 }
                 break;
