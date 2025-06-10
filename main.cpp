@@ -1,4 +1,5 @@
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -20,10 +21,33 @@ int main() {
         std::cerr << "Nie można wczytać czcionki\n"; return -1;
     }
 
+    // --- Ładowanie audio ---
+    sf::Music menuMusic;
+    if (!menuMusic.openFromFile("audio/main_menu_music.ogg")) {
+        std::cerr << "Nie mozna wczytac pliku audio/main_menu_music.ogg\n";
+    }
+    menuMusic.setLoop(true);
+
+    // ZMIANA: Dodanie obiektu muzyki dla gry
+    sf::Music gameMusic;
+    if (!gameMusic.openFromFile("audio/game_music.ogg")) {
+        std::cerr << "Nie mozna wczytac pliku audio/game_music.ogg\n";
+    }
+    gameMusic.setLoop(true);
+
+
+    sf::SoundBuffer buttonClickBuffer;
+    if (!buttonClickBuffer.loadFromFile("audio/button_click.wav")) {
+        std::cerr << "Nie mozna wczytac pliku audio/button_click.wav\n";
+    }
+    sf::Sound buttonClickSound;
+    buttonClickSound.setBuffer(buttonClickBuffer);
+
+
     std::vector<sf::Texture> buildingTextures(3);
     if (!buildingTextures[0].loadFromFile("images/eco_storage.png") ||
-        !buildingTextures[1].loadFromFile("images/eco_solar.jpg") ||
-        !buildingTextures[2].loadFromFile("images/eco_turbine.jpg")) {
+        !buildingTextures[1].loadFromFile("images/eco_solar.png") ||
+        !buildingTextures[2].loadFromFile("images/eco_turbine.png")) {
         std::cerr << "Nie mozna wczytac tekstur budynkow\n"; return -1;
     }
 
@@ -48,9 +72,10 @@ int main() {
     sf::RectangleShape pauseOverlay({(float)WIN_W, (float)WIN_H}); pauseOverlay.setFillColor({0, 0, 0, 150});
     sf::Text pauseTitle("Pauza", gameFont, 60); pauseTitle.setFillColor(sf::Color::White); pauseTitle.setPosition((WIN_W - pauseTitle.getLocalBounds().width)/2.f, 200.f);
     sf::Text pauseResume("Wznow gre (P)", gameFont, 32); pauseResume.setFillColor(sf::Color::White); pauseResume.setPosition((WIN_W - pauseResume.getLocalBounds().width)/2.f, 350.f);
-    sf::FloatRect resumeHotspot = pauseResume.getGlobalBounds();
-    sf::Text pauseExit("Wyjdz do menu", gameFont, 32); pauseExit.setFillColor(sf::Color::White); pauseExit.setPosition((WIN_W - pauseExit.getLocalBounds().width)/2.f, 420.f);
-    sf::FloatRect exitHotspot = pauseExit.getGlobalBounds();
+    sf::Text pauseSave("Zapisz gre", gameFont, 32); pauseSave.setFillColor(sf::Color::White); pauseSave.setPosition((WIN_W - pauseSave.getLocalBounds().width)/2.f, 400.f);
+    sf::Text pauseExit("Wyjdz do menu", gameFont, 32); pauseExit.setFillColor(sf::Color::White); pauseExit.setPosition((WIN_W - pauseExit.getLocalBounds().width)/2.f, 450.f);
+    sf::Clock savedTextClock;
+    bool showSavedText = false;
 
     std::string saveName, currentSaveName;
     sf::Text inputPrompt("Nazwa zapisu:", gameFont, 34); inputPrompt.setFillColor({101, 67, 33}); inputPrompt.setPosition((WIN_W - inputPrompt.getLocalBounds().width) / 2.f, 186.f);
@@ -62,24 +87,97 @@ int main() {
     GameState state = GameState::MainMenu;
     sf::Clock deltaClock;
 
+    float savedMusicValue = 0.5f;
+    float savedSfxValue = 0.5f;
+    musicSlider.setValue(savedMusicValue);
+    sfxSlider.setValue(savedSfxValue);
+
     while (window.isOpen()) {
+        if (showSavedText && savedTextClock.getElapsedTime().asSeconds() > 1.5f) {
+            showSavedText = false;
+            pauseSave.setString("Zapisz gre");
+            pauseSave.setPosition((WIN_W - pauseSave.getLocalBounds().width)/2.f, 400.f);
+            pauseSave.setFillColor(sf::Color::White);
+        }
+
+        // --- ZMIANA: Zarządzanie dwiema ścieżkami muzycznymi ---
+        bool shouldMenuMusicBePlaying = false;
+        bool shouldGameMusicBePlaying = false;
+
+        switch (state) {
+        case GameState::MainMenu:
+        case GameState::OptionsMenu:
+        case GameState::EnterSaveName:
+        case GameState::LoadMenu:
+            shouldMenuMusicBePlaying = true;
+            break;
+
+        case GameState::Playing:
+        case GameState::PauseMenu:
+        case GameState::EnergyMenu:
+        case GameState::InGameOptionsMenu:
+            shouldGameMusicBePlaying = true;
+            break;
+        }
+
+        // Logika dla muzyki w menu
+        if (shouldMenuMusicBePlaying && menuMusic.getStatus() != sf::Music::Playing) {
+            menuMusic.play();
+        } else if (!shouldMenuMusicBePlaying && menuMusic.getStatus() == sf::Music::Playing) {
+            menuMusic.stop();
+        }
+
+        // Logika dla muzyki w grze
+        if (shouldGameMusicBePlaying && gameMusic.getStatus() != sf::Music::Playing) {
+            gameMusic.play();
+        } else if (!shouldGameMusicBePlaying && gameMusic.getStatus() == sf::Music::Playing) {
+            gameMusic.stop();
+        }
+
+        // Ustawianie głośności dla obu ścieżek
+        menuMusic.setVolume(savedMusicValue * 100.f);
+        gameMusic.setVolume(savedMusicValue * 100.f);
+        buttonClickSound.setVolume(savedSfxValue * 100.f);
+
+
         sf::Event e;
         while (window.pollEvent(e)) {
             if (e.type == sf::Event::Closed) window.close();
 
             switch (state) {
             case GameState::Playing:
-            case GameState::EnergyMenu: // Zdarzenia dla gry i menu energii są obsługiwane w klasie Game
+            case GameState::EnergyMenu:
+            case GameState::InGameOptionsMenu:
                 game.handleEvent(e, window, state);
                 break;
             case GameState::PauseMenu:
-                if ((e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::P) ||
-                    (e.type == sf::Event::MouseButtonPressed && resumeHotspot.contains(window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y})))) {
-                    state = GameState::Playing;
+                if (e.type == sf::Event::MouseButtonPressed) {
+                    sf::Vector2f pos = window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y});
+                    if (pauseResume.getGlobalBounds().contains(pos)) {
+                        state = GameState::Playing;
+                    } else if (pauseSave.getGlobalBounds().contains(pos) && !showSavedText) {
+                        if (!currentSaveName.empty()) {
+                            if(SaveManager::saveGame(currentSaveName, game)) {
+                                pauseSave.setString("Zapisano!");
+                                pauseSave.setFillColor(sf::Color::Green);
+                                pauseSave.setPosition((WIN_W - pauseSave.getLocalBounds().width)/2.f, 400.f);
+                                savedTextClock.restart();
+                                showSavedText = true;
+                            }
+                        } else {
+                            pauseSave.setString("Brak nazwy zapisu!");
+                            pauseSave.setFillColor(sf::Color::Red);
+                            pauseSave.setPosition((WIN_W - pauseSave.getLocalBounds().width)/2.f, 400.f);
+                            savedTextClock.restart();
+                            showSavedText = true;
+                        }
+                    } else if (pauseExit.getGlobalBounds().contains(pos)) {
+                        if (!currentSaveName.empty()) SaveManager::saveGame(currentSaveName, game);
+                        state = GameState::MainMenu;
+                    }
                 }
-                if (e.type == sf::Event::MouseButtonPressed && exitHotspot.contains(window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y}))) {
-                    if (!currentSaveName.empty()) SaveManager::saveGame(currentSaveName, game);
-                    state = GameState::MainMenu;
+                if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::P) {
+                    state = GameState::Playing;
                 }
                 break;
             case GameState::MainMenu:
@@ -90,10 +188,30 @@ int main() {
                     sf::FloatRect hotLoad(hotNew.left, hotNew.top + btn.size.height + 20.f, hotNew.width, hotNew.height);
                     sf::FloatRect hotOpt(hotNew.left, hotLoad.top + btn.size.height + 20.f, hotNew.width, hotNew.height);
                     sf::FloatRect hotExit(hotNew.left, hotOpt.top + btn.size.height + 20.f, hotNew.width, hotNew.height);
-                    if (hotNew.contains(pos)) { game.reset(); saveName.clear(); currentSaveName = ""; inputText.setString(""); cursorClock.restart(); state = GameState::EnterSaveName; }
-                    else if (hotLoad.contains(pos)) { saves = SaveManager::listSaves(); selectedIndex = 0; state = GameState::LoadMenu; }
-                    else if (hotOpt.contains(pos)) { state = GameState::OptionsMenu; }
-                    else if (hotExit.contains(pos)) { window.close(); }
+
+                    if (hotNew.contains(pos)) {
+                        buttonClickSound.play();
+                        game.reset();
+                        saveName.clear();
+                        currentSaveName = "";
+                        inputText.setString("");
+                        cursorClock.restart();
+                        state = GameState::EnterSaveName;
+                    }
+                    else if (hotLoad.contains(pos)) {
+                        buttonClickSound.play();
+                        saves = SaveManager::listSaves();
+                        selectedIndex = 0;
+                        state = GameState::LoadMenu;
+                    }
+                    else if (hotOpt.contains(pos)) {
+                        buttonClickSound.play();
+                        state = GameState::OptionsMenu;
+                    }
+                    else if (hotExit.contains(pos)) {
+                        buttonClickSound.play();
+                        window.close();
+                    }
                 }
                 break;
             case GameState::LoadMenu:
@@ -103,6 +221,7 @@ int main() {
                     else if (e.key.code == sf::Keyboard::Down && selectedIndex + 1 < saves.size()) ++selectedIndex;
                     else if (e.key.code == sf::Keyboard::Enter && !saves.empty()) {
                         currentSaveName = saves[selectedIndex];
+                        game.currentSaveName = currentSaveName;
                         if (SaveManager::loadGame(currentSaveName, game, &buildingTextures)) state = GameState::Playing;
                         else { std::cerr << "Wczytywanie nie powiodlo sie.\n"; currentSaveName = ""; }
                     }
@@ -111,7 +230,11 @@ int main() {
             case GameState::EnterSaveName:
                 if (e.type == sf::Event::TextEntered) {
                     if (e.text.unicode == '\r' || e.text.unicode == '\n') {
-                        if (!saveName.empty()) { currentSaveName = saveName; SaveManager::saveGame(currentSaveName, game); }
+                        if (!saveName.empty()) {
+                            currentSaveName = saveName;
+                            game.currentSaveName = currentSaveName;
+                            SaveManager::saveGame(currentSaveName, game);
+                        }
                         state = GameState::Playing;
                     } else if (e.text.unicode == 8 && !saveName.empty()) saveName.pop_back();
                     else if (e.text.unicode >= 32 && e.text.unicode < 128) saveName.push_back(static_cast<char>(e.text.unicode));
@@ -120,25 +243,62 @@ int main() {
                 if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) state = GameState::MainMenu;
                 break;
             case GameState::OptionsMenu:
-                musicSlider.handleEvent(e, window); sfxSlider.handleEvent(e, window);
+                musicSlider.handleEvent(e, window);
+                sfxSlider.handleEvent(e, window);
+
+                if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
+                    sf::Vector2f pos = window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y});
+                    const float buttonWidth = OPTIONS_THEME.saveButton.size.width;
+                    const float buttonHeight = OPTIONS_THEME.saveButton.size.height;
+                    const float buttonY = OPTIONS_THEME.saveButtonY;
+                    const float gap = 40.f;
+                    const float saveX = (WIN_W / 2.f) - buttonWidth - (gap / 2.f);
+                    const float cancelX = (WIN_W / 2.f) + (gap / 2.f);
+                    sf::FloatRect saveHotspot(saveX, buttonY, buttonWidth, buttonHeight);
+                    sf::FloatRect cancelHotspot(cancelX, buttonY, buttonWidth, buttonHeight);
+
+                    if (saveHotspot.contains(pos)) {
+                        buttonClickSound.play();
+                        savedMusicValue = musicSlider.getValue();
+                        savedSfxValue = sfxSlider.getValue();
+                        std::cout << "Ustawienia zapisane!\n";
+                        state = GameState::MainMenu;
+                    } else if (cancelHotspot.contains(pos)) {
+                        buttonClickSound.play();
+                        musicSlider.setValue(savedMusicValue);
+                        sfxSlider.setValue(savedSfxValue);
+                        std::cout << "Anulowano zmiane ustawien.\n";
+                        state = GameState::MainMenu;
+                    }
+                }
+                if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) {
+                    musicSlider.setValue(savedMusicValue);
+                    sfxSlider.setValue(savedSfxValue);
+                    state = GameState::MainMenu;
+                }
                 break;
             }
         }
 
-        // --- Aktualizacja logiki ---
         if (state == GameState::Playing) {
             game.update(deltaClock.restart().asSeconds());
         } else if (state == GameState::EnergyMenu) {
             game.updateEnergyMenu();
         }
 
-        // --- Renderowanie ---
         window.clear();
         switch (state) {
         case GameState::Playing: game.draw(window); break;
-        case GameState::PauseMenu: game.drawForPause(window); window.draw(pauseOverlay); window.draw(pauseTitle); window.draw(pauseResume); window.draw(pauseExit); break;
+        case GameState::PauseMenu:
+            game.drawForPause(window);
+            window.draw(pauseOverlay);
+            window.draw(pauseTitle);
+            window.draw(pauseResume);
+            window.draw(pauseSave);
+            window.draw(pauseExit);
+            break;
         case GameState::EnergyMenu: game.drawEnergyMenu(window); break;
-        // ... reszta renderowania menu pozostaje bez zmian
+        case GameState::InGameOptionsMenu: game.drawOptionsMenu(window); break;
         case GameState::MainMenu: window.draw(menuSprite); break;
         case GameState::LoadMenu:
             window.draw(loadDialogSprite);
@@ -156,7 +316,11 @@ int main() {
                 sf::RectangleShape cur({2.f, (float)inputText.getCharacterSize()}); cur.setFillColor({101, 67, 33}); cur.setPosition(inputText.getPosition().x + inputText.getLocalBounds().width + 2.f, inputText.getPosition().y + 8.f); window.draw(cur);
             }
             break;
-        case GameState::OptionsMenu: window.draw(optsSprite); musicSlider.draw(window); sfxSlider.draw(window); break;
+        case GameState::OptionsMenu:
+            window.draw(optsSprite);
+            musicSlider.draw(window);
+            sfxSlider.draw(window);
+            break;
         }
         window.display();
     }

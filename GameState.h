@@ -6,10 +6,11 @@ enum class GameState {
     MainMenu,
     EnterSaveName,
     LoadMenu,
-    OptionsMenu,
+    OptionsMenu,       // Dla opcji w menu głównym
     Playing,
     PauseMenu,
-    EnergyMenu
+    EnergyMenu,
+    InGameOptionsMenu  // NOWY STAN dla opcji w trakcie gry
 };
 
 #endif // GAMESTATE_H
