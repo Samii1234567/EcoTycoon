@@ -13,7 +13,6 @@ HUD::HUD(sf::Font& font) : m_font(font) {
     m_valueEnv.setFont(m_font); m_valueEnv.setCharacterSize(24); m_valueEnv.setFillColor(brown); m_valueEnv.setPosition(654.f, 752.f);
     m_labelTime.setFont(m_font); m_labelTime.setCharacterSize(30); m_labelTime.setFillColor(brown); m_labelTime.setPosition(980.f, 744.f);
 
-    // ZMIANA: Inicjalizacja przycisku sprzedaży energii
     m_energySellButtonBg.setRadius(15.f);
     m_energySellButtonBg.setFillColor(sf::Color(90, 160, 90));
     m_energySellIcon.setFont(m_font);
@@ -33,9 +32,9 @@ HUD::HUD(sf::Font& font) : m_font(font) {
     m_energySellIcon.setPosition(buttonCenterX, buttonCenterY);
 }
 
-void HUD::update(float money, float energy, float maxEnergy, float envHealth, float totalTime) {
-    m_valueMoney.setString(std::to_string(static_cast<int>(money)) + "$");
-    m_valueEnergy.setString(std::to_string(static_cast<int>(energy)) + "/" + std::to_string(static_cast<int>(maxEnergy)));
+void HUD::update(int money, int energy, int maxEnergy, float envHealth, float totalTime) {
+    m_valueMoney.setString(std::to_string(money) + "$");
+    m_valueEnergy.setString(std::to_string(energy) + "/" + std::to_string(maxEnergy));
     m_valueEnv.setString(std::to_string(static_cast<int>(envHealth)) + "%");
 
     int m = static_cast<int>(totalTime) / 60;
@@ -50,12 +49,10 @@ void HUD::draw(sf::RenderWindow& window) {
     window.draw(m_labelEnergy); window.draw(m_valueEnergy);
     window.draw(m_labelEnv); window.draw(m_valueEnv);
     window.draw(m_labelTime);
-    // ZMIANA: Rysowanie przycisku
     window.draw(m_energySellButtonBg);
     window.draw(m_energySellIcon);
 }
 
-// ZMIANA: Getter dla granic przycisku
 const sf::FloatRect HUD::getEnergySellButtonBounds() const {
     return m_energySellButtonBg.getGlobalBounds();
 }

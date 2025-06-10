@@ -67,7 +67,7 @@ bool SaveManager::loadGame(const std::string& name, Game& game, const std::vecto
     for (size_t i = 0; i < numObjects; ++i) {
         int typeId;
         int gridX, gridY;
-        float price;
+        int price; // ZMIANA: float -> int
         ifs >> typeId >> gridX >> gridY >> price;
         if (!ifs) { game.placedObjects.clear(); return false; }
 

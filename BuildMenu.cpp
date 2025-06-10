@@ -12,7 +12,7 @@ bool BuildMenu::initialize(const sf::Font& font, const std::vector<sf::Texture>&
 
     background.setSize({300.f, 200.f});
     background.setFillColor(sf::Color(222, 184, 135, 230));
-    background.setPosition(10.f, 100.f + 10.f);
+    background.setPosition(10.f, 131.f);
     background.setOutlineColor(sf::Color(80, 51, 20));
     background.setOutlineThickness(2.f);
 
@@ -41,11 +41,10 @@ void BuildMenu::setupItems(const sf::Font& font) {
     float btnHeight = 50.f;
     float spacing   = 60.f;
 
-    // <-- ZMIANA: Zaktualizowane ceny budynkÃ³w
-    std::vector<std::pair<std::string,float>> data = {
-        {"Magazyn energii",  500.f},
-        {"Panele sloneczne", 200.f},
-        {"Turbina wiatrowa", 500.f}
+    std::vector<std::pair<std::string,int>> data = {
+        {"Magazyn energii",  500},
+        {"Panele sloneczne", 200},
+        {"Turbina wiatrowa", 500}
     };
 
     for (std::size_t i = 0; i < items.size(); ++i) {
@@ -74,7 +73,7 @@ void BuildMenu::setupItems(const sf::Font& font) {
         it.priceText.setFont(font);
         it.priceText.setCharacterSize(16);
         it.priceText.setFillColor(sf::Color(80, 51, 20));
-        it.priceText.setString(std::to_string(static_cast<int>(it.currentPrice)) + "$");
+        it.priceText.setString(std::to_string(it.currentPrice) + "$");
         auto pb = it.priceText.getLocalBounds();
         it.priceText.setPosition(
             bgX + 10.f + btnWidth - pb.width - 10.f,
@@ -83,7 +82,7 @@ void BuildMenu::setupItems(const sf::Font& font) {
     }
 }
 
-void BuildMenu::handleEvent(const sf::Event& ev, sf::RenderWindow& window, float& money) {
+void BuildMenu::handleEvent(const sf::Event& ev, sf::RenderWindow& window, int& money) {
     if (!visible || dragState.has_value()) return;
 
     if (ev.type == sf::Event::MouseButtonPressed &&

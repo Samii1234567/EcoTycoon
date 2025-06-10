@@ -37,14 +37,19 @@ struct PlacedObject {
     int typeId;
     sf::Sprite sprite;
     std::unique_ptr<Building> logic;
-    float price;
+    int price;
     sf::Vector2i gridPosition;
     sf::Vector2i sizeInCells;
 };
 
 class Game {
 public:
-    float currentMoney; float currentEnergy; float maxEnergy; float environmentHealth; float totalGameTimeSeconds;
+    int currentMoney;
+    int currentEnergy;
+    int maxEnergy;
+    float environmentHealth;
+    float totalGameTimeSeconds;
+
     std::vector<PlacedObject> placedObjects;
     std::string currentSaveName;
     float musicVolume;
@@ -61,7 +66,7 @@ public:
     void drawOptionsMenu(sf::RenderWindow& window);
 
     Grid& getGrid() { return m_grid; }
-    void placeBuilding(int typeId, float price, sf::Vector2f position, bool fromPlayerAction = true);
+    void placeBuilding(int typeId, int price, sf::Vector2f position, bool fromPlayerAction = true);
 
 private:
     sf::Font& m_font;

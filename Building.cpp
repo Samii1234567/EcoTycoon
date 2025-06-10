@@ -3,6 +3,7 @@
 #include "Constants.h"
 #include <iostream>
 #include <memory>
+#include <cmath>
 
 void EnergyStorage::update(float dt, Game& game) {
     (void)dt;
@@ -10,17 +11,28 @@ void EnergyStorage::update(float dt, Game& game) {
 }
 
 void SolarPanel::update(float dt, Game& game) {
-    if (game.maxEnergy > 0 && game.currentEnergy < game.maxEnergy) {
-        game.currentEnergy += GameConstants::SOLAR_PANEL_ENERGY_PER_SEC * dt;
+    m_productionAccumulator += GameConstants::SOLAR_PANEL_ENERGY_PER_SEC * dt;
+    if (m_productionAccumulator >= 1.f) {
+        int energyGained = static_cast<int>(floor(m_productionAccumulator));
+        if (game.currentEnergy < game.maxEnergy) {
+            game.currentEnergy += energyGained;
+        }
+        m_productionAccumulator -= energyGained;
     }
 }
 
 WindTurbine::WindTurbine() : m_currentFrame(0) {}
 
 void WindTurbine::update(float dt, Game& game) {
-    if (game.maxEnergy > 0 && game.currentEnergy < game.maxEnergy) {
-        game.currentEnergy += GameConstants::WIND_TURBINE_ENERGY_PER_SEC * dt;
+    m_productionAccumulator += GameConstants::WIND_TURBINE_ENERGY_PER_SEC * dt;
+    if (m_productionAccumulator >= 1.f) {
+        int energyGained = static_cast<int>(floor(m_productionAccumulator));
+        if (game.currentEnergy < game.maxEnergy) {
+            game.currentEnergy += energyGained;
+        }
+        m_productionAccumulator -= energyGained;
     }
+
     if (game.environmentHealth < 100.f) {
         game.environmentHealth += GameConstants::WIND_TURBINE_ENV_REGEN_PER_SEC * dt;
     }

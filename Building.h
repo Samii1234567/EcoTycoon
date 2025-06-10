@@ -24,6 +24,8 @@ public:
 class SolarPanel : public Building {
 public:
     void update(float dt, Game& game) override;
+private:
+    float m_productionAccumulator = 0.0f;
 };
 
 class WindTurbine : public Building {
@@ -32,11 +34,12 @@ public:
     void update(float dt, Game& game) override;
     sf::IntRect getTextureRect() const override;
 private:
+    float m_productionAccumulator = 0.0f;
     sf::Clock m_animClock;
     int m_currentFrame;
 };
 
-// ZMIANA: Przeniesienie funkcji fabrykującej do pliku nagłówkowego jako inline
+// Funkcja fabrykująca, przeniesiona do nagłówka jako inline, aby uniknąć błędów linkera
 inline std::unique_ptr<Building> createBuildingById(int typeId) {
     switch (typeId) {
     case GameConstants::ENERGY_STORAGE_ID:

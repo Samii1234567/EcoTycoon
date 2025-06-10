@@ -21,8 +21,8 @@ const sf::Vector2i WIND_TURBINE_SIZE = {1, 1};
 
 // --- Właściwości budynków ---
 constexpr int ENERGY_STORAGE_CAPACITY_INCREASE = 100;
-constexpr float SOLAR_PANEL_ENERGY_PER_SEC = 2.0f;
-constexpr float WIND_TURBINE_ENERGY_PER_SEC = 5.0f;
+constexpr int SOLAR_PANEL_ENERGY_PER_SEC = 2;
+constexpr int WIND_TURBINE_ENERGY_PER_SEC = 5;
 constexpr float WIND_TURBINE_ENV_REGEN_PER_SEC = 0.1f;
 
 // --- Animacja ---
@@ -32,7 +32,7 @@ constexpr int TURBINE_FRAME_COUNT = 4;
 constexpr float TURBINE_ANIM_SPEED_SEC = 0.15f;
 
 // --- Ekonomia ---
-constexpr float ENERGY_SELL_PRICE = 0.5f;
+constexpr int ENERGY_SELL_PRICE = 2;
 }
 
 #endif // CONSTANTS_H

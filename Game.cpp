@@ -3,6 +3,7 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <cmath>
 
 // --- Implementacja Grid ---
 Grid::Grid() : m_cols(0), m_rows(0), m_cellSize(0) {}
@@ -197,9 +198,9 @@ Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures)
 }
 
 void Game::reset() {
-    currentMoney = 1000.f;
-    currentEnergy = 0.f;
-    maxEnergy = 100.f;
+    currentMoney = 1000;
+    currentEnergy = 0;
+    maxEnergy = 100;
     environmentHealth = 100.f;
     totalGameTimeSeconds = 0.f;
     placedObjects.clear();
@@ -243,7 +244,7 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
                 if (m_demolishModeActive) {
                     for (auto it = placedObjects.begin(); it != placedObjects.end(); ++it) {
                         if (it->sprite.getGlobalBounds().contains(pos)) {
-                            currentMoney += it->price / 2.f;
+                            currentMoney += it->price / 2;
                             if (it->typeId == GameConstants::ENERGY_STORAGE_ID) {
                                 maxEnergy -= GameConstants::ENERGY_STORAGE_CAPACITY_INCREASE;
                                 if (currentEnergy > maxEnergy) currentEnergy = maxEnergy;
@@ -270,15 +271,15 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
                         uiClicked = true;
                     } else if (m_optionsIconHotspot.contains(pos)) {
                         clickSound.play();
+                        m_musicSlider->setValue(musicVolume);
+                        m_sfxSlider->setValue(sfxVolume);
                         currentState = GameState::InGameOptionsMenu;
                         uiClicked = true;
                     } else if (m_pauseIconHotspot.contains(pos)) {
                         clickSound.play();
                         currentState = GameState::PauseMenu;
                         uiClicked = true;
-                    }
-                    // ZMIANA: Przywrócenie brakującego warunku dla przycisku sprzedaży energii
-                    else if (m_hud.getEnergySellButtonBounds().contains(pos)) {
+                    } else if (m_hud.getEnergySellButtonBounds().contains(pos)) {
                         clickSound.play();
                         currentState = GameState::EnergyMenu;
                         uiClicked = true;
@@ -318,7 +319,7 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
             sf::Vector2f pos = window.mapPixelToCoords({ev.mouseButton.x, ev.mouseButton.y});
             if (m_sellButton.getGlobalBounds().contains(pos)) {
                 clickSound.play();
-                currentMoney += currentEnergy * GameConstants::ENERGY_SELL_PRICE;
+                currentMoney += static_cast<int>(currentEnergy * GameConstants::ENERGY_SELL_PRICE);
                 currentEnergy = 0;
                 currentState = GameState::Playing;
             } else if (m_closeButton.getGlobalBounds().contains(pos)) {
@@ -339,7 +340,6 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
         }
         if (ev.type == sf::Event::MouseButtonPressed && ev.mouseButton.button == sf::Mouse::Left) {
             sf::Vector2f pos = window.mapPixelToCoords({ev.mouseButton.x, ev.mouseButton.y});
-
             if (m_applyButton.getGlobalBounds().contains(pos)) {
                 clickSound.play();
                 musicVolume = m_musicSlider->getValue();
@@ -376,8 +376,8 @@ void Game::update(float dt) {
     m_windTurbineSound.setVolume(this->sfxVolume * 100.f);
     m_energyStorageSound.setVolume(this->sfxVolume * 100.f);
 
-    currentEnergy = std::min(currentEnergy, maxEnergy);
-    environmentHealth = std::min(environmentHealth, 100.f);
+    if (currentEnergy > maxEnergy) currentEnergy = maxEnergy;
+    if (environmentHealth > 100.f) environmentHealth = 100.f;
     m_hud.update(currentMoney, currentEnergy, maxEnergy, environmentHealth, totalGameTimeSeconds);
 }
 
@@ -414,7 +414,7 @@ void Game::drawForPause(sf::RenderWindow& window) {
     draw(window);
 }
 
-void Game::placeBuilding(int typeId, float price, sf::Vector2f position, bool fromPlayerAction) {
+void Game::placeBuilding(int typeId, int price, sf::Vector2f position, bool fromPlayerAction) {
     sf::Vector2i gridPos = m_grid.worldToGridCoords(position);
     sf::Vector2i buildingSize = getBuildingSize(typeId);
 
@@ -461,7 +461,7 @@ void Game::placeBuilding(int typeId, float price, sf::Vector2f position, bool fr
 
 void Game::updateEnergyMenu() {
     std::ostringstream oss;
-    oss << "Zgromadzona energia: " << static_cast<int>(currentEnergy) << " / " << static_cast<int>(maxEnergy);
+    oss << "Zgromadzona energia: " << currentEnergy << " / " << maxEnergy;
     m_energyInfoText.setString(oss.str());
     oss.str("");
     oss.clear();
