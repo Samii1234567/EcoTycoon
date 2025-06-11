@@ -14,6 +14,7 @@ public:
     static bool saveGame(const std::string& name, const Game& game);
     static std::vector<std::string> listSaves();
     static bool loadGame(const std::string& name, Game& game, const std::vector<sf::Texture>* buildingTextures);
+    static bool deleteGame(const std::string& name);
 };
 
 #endif // SAVEMANAGER_H

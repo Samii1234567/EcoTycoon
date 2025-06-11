@@ -1,4 +1,5 @@
 #include "BuildMenu.h"
+#include "Constants.h"
 #include <cmath>
 #include <iostream>
 
@@ -10,7 +11,7 @@ BuildMenu::BuildMenu()
 bool BuildMenu::initialize(const sf::Font& font, const std::vector<sf::Texture>& textures) {
     itemTexturesRef = &textures;
 
-    background.setSize({300.f, 200.f});
+    background.setSize({300.f, 260.f});
     background.setFillColor(sf::Color(222, 184, 135, 230));
     background.setPosition(10.f, 131.f);
     background.setOutlineColor(sf::Color(80, 51, 20));
@@ -33,7 +34,7 @@ bool BuildMenu::isVisible() const {
 
 void BuildMenu::setupItems(const sf::Font& font) {
     items.clear();
-    items.resize(3);
+    items.resize(4);
 
     float bgX = background.getPosition().x;
     float bgY = background.getPosition().y;
@@ -42,9 +43,10 @@ void BuildMenu::setupItems(const sf::Font& font) {
     float spacing   = 60.f;
 
     std::vector<std::pair<std::string,int>> data = {
-        {"Magazyn energii",  500},
-        {"Panele sloneczne", 200},
-        {"Turbina wiatrowa", 500}
+        {"Magazyn energii",     500},
+        {"Panele sloneczne",    200},
+        {"Turbina wiatrowa",    500},
+        {"Stacja Filtrowania", 1500}
     };
 
     for (std::size_t i = 0; i < items.size(); ++i) {
@@ -82,8 +84,8 @@ void BuildMenu::setupItems(const sf::Font& font) {
     }
 }
 
-void BuildMenu::handleEvent(const sf::Event& ev, sf::RenderWindow& window, int& money) {
-    if (!visible || dragState.has_value()) return;
+BuildMenu::ClickResult BuildMenu::handleEvent(const sf::Event& ev, sf::RenderWindow& window, int& money) {
+    if (!visible || dragState.has_value()) return ClickResult::None;
 
     if (ev.type == sf::Event::MouseButtonPressed &&
         ev.mouseButton.button == sf::Mouse::Left)
@@ -94,27 +96,47 @@ void BuildMenu::handleEvent(const sf::Event& ev, sf::RenderWindow& window, int& 
                 if (money >= it.currentPrice) {
                     dragState = DragState{it.id, it.currentPrice};
                     dragState->sprite.setTexture((*itemTexturesRef)[it.id]);
-                    auto texSize = (*itemTexturesRef)[it.id].getSize();
-                    dragState->sprite.setOrigin(texSize.x / 2.f, texSize.y / 2.f);
+
+                    if (it.id == GameConstants::WIND_TURBINE_ID) {
+                        dragState->sprite.setTextureRect({0, 0, GameConstants::TURBINE_FRAME_WIDTH, GameConstants::TURBINE_FRAME_HEIGHT});
+                        dragState->sprite.setOrigin(GameConstants::TURBINE_FRAME_WIDTH / 2.f, GameConstants::TURBINE_FRAME_HEIGHT / 2.f);
+                    } else {
+                        auto texSize = (*itemTexturesRef)[it.id].getSize();
+                        dragState->sprite.setOrigin(texSize.x / 2.f, texSize.y / 2.f);
+                    }
+
                     dragState->sprite.setColor({255, 255, 255, 150});
-                    std::cout << "Rozpoczeto przeciaganie: " << it.name << "\n";
+                    visible = false;
+                    return ClickResult::DragStarted;
                 } else {
-                    std::cout << "Brak srodkow na " << it.name
-                              << ". Potrzebujesz " << it.currentPrice << "$.\n";
+                    m_flashItemId = it.id;
+                    m_flashClock.restart();
+                    return ClickResult::NotEnoughMoney;
                 }
-                return;
             }
         }
     }
+    return ClickResult::None;
 }
 
 void BuildMenu::draw(sf::RenderWindow& window) {
     if (!visible) return;
+
+    if (m_flashItemId != -1 && m_flashClock.getElapsedTime().asSeconds() > 0.5f) {
+        m_flashItemId = -1;
+    }
+
     window.draw(background);
     for (auto& it : items) {
         window.draw(it.buttonShape);
         window.draw(it.nameText);
+
+        sf::Color originalColor = it.priceText.getFillColor();
+        if (it.id == m_flashItemId) {
+            it.priceText.setFillColor(sf::Color::Red);
+        }
         window.draw(it.priceText);
+        it.priceText.setFillColor(originalColor);
     }
 }
 

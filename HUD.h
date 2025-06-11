@@ -8,10 +8,10 @@ class HUD {
 public:
     HUD(sf::Font& font);
 
-    // ZMIANA: Metoda przyjmuje teraz wartości int
     void update(int money, int energy, int maxEnergy, float envHealth, float totalTime);
     void draw(sf::RenderWindow& window);
     const sf::FloatRect getEnergySellButtonBounds() const;
+    void flashMoney(); // <-- ZMIANA: Publiczna funkcja do uruchamiania podświetlenia
 
 private:
     sf::Font& m_font;
@@ -19,6 +19,10 @@ private:
     sf::Text m_valueMoney, m_valueEnergy, m_valueEnv;
     sf::CircleShape m_energySellButtonBg;
     sf::Text m_energySellIcon;
+
+    // ZMIANA: Zmienne do podświetlania gotówki
+    bool m_isFlashingMoney = false;
+    sf::Clock m_moneyFlashClock;
 };
 
 #endif // HUD_H

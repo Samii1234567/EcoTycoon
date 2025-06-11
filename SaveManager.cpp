@@ -1,6 +1,5 @@
 #include "SaveManager.h"
 #include "Game.h"
-#include "Constants.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -28,7 +27,8 @@ bool SaveManager::saveGame(const std::string& name, const Game& game) {
             << obj.gridPosition.x << " "
             << obj.gridPosition.y << " "
             << obj.price << " "
-            << obj.level << "\n";
+            << obj.level << " "
+            << obj.isDamaged << "\n";
     }
     return true;
 }
@@ -62,7 +62,8 @@ bool SaveManager::loadGame(const std::string& name, Game& game, const std::vecto
 
     for (size_t i = 0; i < numObjects; ++i) {
         int typeId, gridX, gridY, price, level;
-        ifs >> typeId >> gridX >> gridY >> price >> level;
+        bool isDamaged;
+        ifs >> typeId >> gridX >> gridY >> price >> level >> isDamaged;
         if (!ifs) { game.placedObjects.clear(); return false; }
 
         sf::Vector2i gridPos = {gridX, gridY};
@@ -71,8 +72,25 @@ bool SaveManager::loadGame(const std::string& name, Game& game, const std::vecto
         game.placeBuilding(typeId, price, worldPos, false);
         if (!game.placedObjects.empty()) {
             game.placedObjects.back().level = level;
+            game.placedObjects.back().isDamaged = isDamaged;
+            if(isDamaged) {
+                game.placedObjects.back().sprite.setColor(sf::Color(255, 100, 100));
+            }
         }
     }
     game.currentSaveName = name;
     return true;
+}
+
+bool SaveManager::deleteGame(const std::string& name) {
+    std::string path = SAVE_DIR + name + ".save";
+    try {
+        if (fs::exists(path)) {
+            return fs::remove(path);
+        }
+    } catch (const fs::filesystem_error& e) {
+        std::cerr << "Błąd podczas usuwania pliku " << path << ": " << e.what() << '\n';
+        return false;
+    }
+    return false;
 }

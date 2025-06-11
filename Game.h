@@ -1,22 +1,24 @@
 #ifndef GAME_H
 #define GAME_H
 
-#include "Grid.h"
-#include "Building.h"
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
 #include <vector>
 #include <string>
 #include <memory>
-#include <sstream> // Potrzebne dla ostringstream w tooltipie
+#include <random>
+#include <deque>
 #include "SaveManager.h"
 #include "GameBackground.h"
 #include "BuildMenu.h"
 #include "HUD.h"
 #include "GameState.h"
 #include "Slider.h"
+#include "Building.h"
+#include "Grid.h"
+#include "WeatherSystem.h"
 
-// ZMIANA: Implementacja klasy BuildingTooltip została przeniesiona w całości do pliku nagłówkowego
+// POCZĄTEK POPRAWKI: Przywrócenie brakującej definicji klasy BuildingTooltip
 class BuildingTooltip {
 public:
     BuildingTooltip() : m_visible(false), m_upgradeClicked(false) {}
@@ -43,7 +45,7 @@ public:
         m_upgradeButton.setSize({200.f, 30.f});
         m_upgradeButtonText.setFont(font);
         m_upgradeButtonText.setCharacterSize(14);
-        m_upgradeButtonText.setFillColor(sf::Color::Black);
+        m_upgradeButtonText.setFillColor(sf::Color::White);
     }
 
     void show(const PlacedObject& building, int playerMoney) {
@@ -64,13 +66,19 @@ public:
         case GameConstants::WIND_TURBINE_ID:
             name = "Turbina wiatrowa";
             info = "Produkcja: " + std::to_string(GameConstants::WIND_TURBINE_DATA.value[building.level - 1]) + " E/s\n";
-            info += "Srodowisko: +" + std::to_string(GameConstants::WIND_TURBINE_DATA.envEffect[building.level - 1]) + "%/s";
+            info += "Srodowisko: +" + std::to_string((int)(GameConstants::WIND_TURBINE_DATA.envEffect[building.level - 1]*100)) + "%/s";
             if (!maxLevel) cost = GameConstants::WIND_TURBINE_DATA.upgradeCost[building.level];
             break;
         case GameConstants::ENERGY_STORAGE_ID:
             name = "Magazyn energii";
             info = "Pojemnosc: +" + std::to_string(GameConstants::STORAGE_DATA.value[building.level - 1]);
             if (!maxLevel) cost = GameConstants::STORAGE_DATA.upgradeCost[building.level];
+            break;
+        case GameConstants::AIR_FILTER_ID:
+            name = "Stacja Filtrowania";
+            info = "Koszt: " + std::to_string(GameConstants::AIR_FILTER_DATA.value[building.level - 1]) + " E/s\n";
+            info += "Srodowisko: +" + std::to_string((int)(GameConstants::AIR_FILTER_DATA.envEffect[building.level - 1]*100)) + "%/s";
+            if (!maxLevel) cost = GameConstants::AIR_FILTER_DATA.upgradeCost[building.level];
             break;
         }
 
@@ -113,7 +121,8 @@ public:
         m_upgradeClicked = false;
 
         if (ev.type == sf::Event::MouseButtonPressed && ev.mouseButton.button == sf::Mouse::Left) {
-            if (m_upgradeButton.getGlobalBounds().contains(window.mapPixelToCoords({ev.mouseButton.x, ev.mouseButton.y}))) {
+            sf::FloatRect mouseRect(static_cast<float>(ev.mouseButton.x), static_cast<float>(ev.mouseButton.y), 1, 1);
+            if (m_upgradeButton.getGlobalBounds().contains(window.mapPixelToCoords(sf::Mouse::getPosition(window)))) {
                 m_upgradeClicked = true;
             }
         }
@@ -133,20 +142,21 @@ public:
 
 private:
     sf::RectangleShape m_background;
-    sf::Text m_titleText;
-    sf::Text m_levelText;
-    sf::Text m_infoText;
+    sf::Text m_titleText, m_levelText, m_infoText, m_upgradeButtonText;
     sf::RectangleShape m_upgradeButton;
-    sf::Text m_upgradeButtonText;
     bool m_visible;
     bool m_upgradeClicked;
 };
+// KONIEC POPRAWKI
 
 
 class Game {
 public:
-    int currentMoney; int currentEnergy; int maxEnergy;
-    float environmentHealth; float totalGameTimeSeconds;
+    int currentMoney;
+    int currentEnergy;
+    int maxEnergy;
+    float environmentHealth;
+    float totalGameTimeSeconds;
 
     std::vector<PlacedObject> placedObjects;
     std::string currentSaveName;
@@ -162,12 +172,19 @@ public:
     void updateEnergyMenu();
     void drawEnergyMenu(sf::RenderWindow& window);
     void drawOptionsMenu(sf::RenderWindow& window);
+    void showNotification(const std::string& message);
 
     Grid& getGrid() { return m_grid; }
     void placeBuilding(int typeId, int price, sf::Vector2f position, bool fromPlayerAction = true);
 
+    float getWeatherMultiplierSolar() const { return m_weatherEffectMultiplierSolar; }
+    float getWeatherMultiplierWind() const { return m_weatherEffectMultiplierWind; }
+
 private:
     void upgradeBuilding(PlacedObject& buildingToUpgrade);
+    void changeWeather();
+    void drawWeatherUI(sf::RenderWindow& window);
+    void drawDamagedIcons(sf::RenderWindow& window);
 
     sf::Font& m_font;
     std::vector<sf::Texture>& m_buildingTextures;
@@ -179,10 +196,29 @@ private:
     BuildingTooltip m_tooltip;
     PlacedObject* m_hoveredBuilding = nullptr;
 
+    WeatherType m_currentWeather;
+    float m_weatherTimer;
+    float m_weatherEffectMultiplierSolar;
+    float m_weatherEffectMultiplierWind;
+    std::deque<WeatherType> m_forecast;
+    static constexpr int FORECAST_LENGTH = 5;
+
+    std::mt19937 m_rng;
+    std::uniform_int_distribution<int> m_weatherTimeDist;
+    std::uniform_real_distribution<float> m_damageDist;
+
+    bool m_weatherBoardExpanded;
+    sf::RectangleShape m_weatherBoardBG;
+    sf::CircleShape m_weatherIconPlaceholder;
+    sf::Text m_weatherStatusText;
+    sf::RectangleShape m_weatherPanel;
+    sf::Text m_weatherPanelTitle, m_weatherPanelCurrentLabel, m_weatherPanelCurrentDesc, m_weatherPanelForecastLabel;
+
     sf::Texture m_grassTexture;
     sf::RectangleShape m_grassArea;
     sf::RectangleShape m_buildModeOverlay;
-
+    sf::Texture m_repairIconTexture;
+    sf::Sprite m_repairIconSprite;
     bool m_hammerPressed = false;
     bool m_isBuildMode = false;
     bool m_demolishModeActive = false;
@@ -209,8 +245,19 @@ private:
     sf::RectangleShape m_applyButton, m_cancelButton;
     sf::Text m_applyButtonText, m_cancelButtonText;
 
+    // --- System Dźwięku (zintegrowany) ---
     sf::SoundBuffer m_solarPanelBuffer, m_windTurbineBuffer, m_energyStorageBuffer, m_upgradeBuffer;
     sf::Sound m_solarPanelSound, m_windTurbineSound, m_energyStorageSound, m_upgradeSound;
-};
+    sf::SoundBuffer m_buildingPlaceBuffer, m_buildingSellBuffer;
+    sf::Sound m_buildingPlaceSound, m_buildingSellSound;
+    sf::SoundBuffer m_cashRegisterBuffer;
+    sf::Sound m_cashRegisterSound;
+    sf::SoundBuffer m_repairBuffer;
+    sf::Sound m_repairSound;
 
+    // --- System Powiadomień ---
+    sf::Text m_notificationText;
+    sf::Clock m_notificationClock;
+    bool m_showNotification = false;
+};
 #endif // GAME_H

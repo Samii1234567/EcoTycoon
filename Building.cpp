@@ -1,15 +1,14 @@
 #include "Building.h"
 #include "Game.h"
-#include "Constants.h"
 #include <cmath>
 
 void EnergyStorage::update(float dt, Game& game, PlacedObject& self) {
-    (void)dt; (void)game; (void)self;
+    game.environmentHealth += GameConstants::STORAGE_DATA.envEffect[self.level - 1] * dt;
 }
 
 void SolarPanel::update(float dt, Game& game, PlacedObject& self) {
     float productionRate = GameConstants::SOLAR_PANEL_DATA.value[self.level - 1];
-    m_productionAccumulator += productionRate * dt;
+    m_productionAccumulator += productionRate * game.getWeatherMultiplierSolar() * dt;
 
     if (m_productionAccumulator >= 1.f) {
         int energyGained = static_cast<int>(floor(m_productionAccumulator));
@@ -18,13 +17,15 @@ void SolarPanel::update(float dt, Game& game, PlacedObject& self) {
         }
         m_productionAccumulator -= energyGained;
     }
+
+    game.environmentHealth += GameConstants::SOLAR_PANEL_DATA.envEffect[self.level - 1] * dt;
 }
 
 WindTurbine::WindTurbine() : m_currentFrame(0) {}
 
 void WindTurbine::update(float dt, Game& game, PlacedObject& self) {
     float energyRate = GameConstants::WIND_TURBINE_DATA.value[self.level - 1];
-    m_productionAccumulator += energyRate * dt;
+    m_productionAccumulator += energyRate * game.getWeatherMultiplierWind() * dt;
     if (m_productionAccumulator >= 1.f) {
         int energyGained = static_cast<int>(floor(m_productionAccumulator));
         if (game.currentEnergy < game.maxEnergy) {
@@ -51,4 +52,14 @@ sf::IntRect WindTurbine::getTextureRect() const {
         GameConstants::TURBINE_FRAME_WIDTH,
         GameConstants::TURBINE_FRAME_HEIGHT
         );
+}
+
+void AirFilter::update(float dt, Game& game, PlacedObject& self) {
+    float energyNeeded = GameConstants::AIR_FILTER_DATA.value[self.level - 1] * dt;
+    if (game.currentEnergy >= static_cast<int>(ceil(energyNeeded))) {
+        game.currentEnergy -= static_cast<int>(ceil(energyNeeded));
+
+        float envRegen = GameConstants::AIR_FILTER_DATA.envEffect[self.level - 1];
+        game.environmentHealth += envRegen * dt;
+    }
 }

@@ -17,6 +17,8 @@ struct BuildItem {
 
 class BuildMenu {
 public:
+    enum class ClickResult { None, DragStarted, NotEnoughMoney };
+
     BuildMenu();
     ~BuildMenu() = default;
 
@@ -29,7 +31,7 @@ public:
     bool initialize(const sf::Font& font, const std::vector<sf::Texture>& textures);
     void setVisible(bool visible);
     bool isVisible() const;
-    void handleEvent(const sf::Event& ev, sf::RenderWindow& window, int& money);
+    ClickResult handleEvent(const sf::Event& ev, sf::RenderWindow& window, int& money);
     void draw(sf::RenderWindow& window);
 
     std::optional<DragState>& getDragState();
@@ -41,6 +43,9 @@ private:
     bool                   visible;
     const std::vector<sf::Texture>* itemTexturesRef = nullptr;
     std::optional<DragState> dragState;
+
+    int m_flashItemId = -1;
+    sf::Clock m_flashClock;
 
     void setupItems(const sf::Font& font);
 };

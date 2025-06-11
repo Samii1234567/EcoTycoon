@@ -9,22 +9,23 @@
 class Game;
 class Building;
 
-// Przeniesiono definicję PlacedObject tutaj, aby uniknąć cyklicznych zależności
+// Definicja PlacedObject jest tutaj, aby uniknąć cyklicznych zależności
 struct PlacedObject {
     int typeId;
     sf::Sprite sprite;
     std::unique_ptr<Building> logic;
     int price;
-    int level; // Aktualny poziom budynku
+    int level;
     sf::Vector2i gridPosition;
     sf::Vector2i sizeInCells;
+    bool isDamaged = false;
 };
 
 class Building {
 public:
     Building() = default;
     virtual ~Building() = default;
-    // ZMIANA: Update przyjmuje teraz referencję do swojego obiektu PlacedObject
+    // Ujednolicona sygnatura metody update, obsługująca ulepszenia
     virtual void update(float dt, Game& game, PlacedObject& self) = 0;
     virtual sf::IntRect getTextureRect() const { return {}; }
 };
@@ -52,13 +53,26 @@ private:
     int m_currentFrame;
 };
 
+class AirFilter : public Building {
+public:
+    void update(float dt, Game& game, PlacedObject& self) override;
+};
+
+// Zaktualizowana fabryka o nowy budynek
 inline std::unique_ptr<Building> createBuildingById(int typeId) {
     switch (typeId) {
-    case GameConstants::ENERGY_STORAGE_ID: return std::make_unique<EnergyStorage>();
-    case GameConstants::SOLAR_PANEL_ID:    return std::make_unique<SolarPanel>();
-    case GameConstants::WIND_TURBINE_ID:   return std::make_unique<WindTurbine>();
-    default:                               return nullptr;
+    case GameConstants::ENERGY_STORAGE_ID:
+        return std::make_unique<EnergyStorage>();
+    case GameConstants::SOLAR_PANEL_ID:
+        return std::make_unique<SolarPanel>();
+    case GameConstants::WIND_TURBINE_ID:
+        return std::make_unique<WindTurbine>();
+    case GameConstants::AIR_FILTER_ID:
+        return std::make_unique<AirFilter>();
+    default:
+        std::cerr << "Nieznane ID budynku podczas tworzenia: " << typeId << std::endl;
+        return nullptr;
     }
 }
 
-#endif
+#endif // BUILDING_H

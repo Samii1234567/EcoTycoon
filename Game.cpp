@@ -4,14 +4,15 @@
 #include <iomanip>
 #include <sstream>
 #include <cmath>
-
-// Implementacja klasy BuildingTooltip została przeniesiona do Game.h
-// Implementacja klasy Grid została przeniesiona do Grid.cpp
+#include <random>
 
 Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures)
     : m_font(font),
     m_buildingTextures(buildingTextures),
-    m_hud(font)
+    m_hud(font),
+    m_rng(std::random_device{}()),
+    m_weatherTimeDist(15, 30),
+    m_damageDist(0.0f, 1.0f)
 {
     musicVolume = 0.5f;
     sfxVolume = 0.5f;
@@ -25,9 +26,13 @@ Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures)
     m_grassArea.setTexture(&m_grassTexture);
 
     m_grid.initialize({0.f, 121.f}, GameConstants::GRID_COLS, GameConstants::GRID_ROWS, GameConstants::GRID_CELL_SIZE);
-
     m_buildModeOverlay.setSize({1200.f, 800.f});
     m_buildModeOverlay.setFillColor(sf::Color(0, 0, 0, 80));
+
+    if (!m_repairIconTexture.loadFromFile("images/repair_icon.png")) { std::cerr << "Nie mozna wczytac repair_icon.png!\n"; }
+    m_repairIconSprite.setTexture(m_repairIconTexture);
+    m_repairIconSprite.setScale(0.5f, 0.5f);
+    m_repairIconSprite.setOrigin(m_repairIconTexture.getSize().x / 2.f, m_repairIconTexture.getSize().y / 2.f);
 
     if (!m_bulldozerTexture.loadFromFile("images/bulldozer.png")) { std::cerr << "Nie mozna wczytac bulldozer.png\n"; }
     m_bulldozerSprite.setTexture(m_bulldozerTexture);
@@ -35,6 +40,7 @@ Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures)
     m_bulldozerSprite.setScale(m_demolishHotspot.width / texSize.x, m_demolishHotspot.height / texSize.y);
     m_bulldozerSprite.setPosition(m_demolishHotspot.left, m_demolishHotspot.top);
 
+    // --- ŁADOWANIE DŹWIĘKÓW ---
     if (!m_solarPanelBuffer.loadFromFile("audio/solar_panel.wav")) { std::cerr << "Nie mozna wczytac solar_panel.wav\n"; }
     m_solarPanelSound.setBuffer(m_solarPanelBuffer);
     if (!m_windTurbineBuffer.loadFromFile("audio/wind_turbine.wav")) { std::cerr << "Nie mozna wczytac wind_turbine.wav\n"; }
@@ -43,8 +49,23 @@ Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures)
     m_energyStorageSound.setBuffer(m_energyStorageBuffer);
     if (!m_upgradeBuffer.loadFromFile("audio/upgrade_sound.wav")) { std::cerr << "Nie mozna wczytac upgrade_sound.wav\n"; }
     m_upgradeSound.setBuffer(m_upgradeBuffer);
+    if (!m_buildingPlaceBuffer.loadFromFile("audio/building_place.wav")) { std::cerr << "Nie mozna wczytac building_place.wav\n"; }
+    m_buildingPlaceSound.setBuffer(m_buildingPlaceBuffer);
+    if (!m_buildingSellBuffer.loadFromFile("audio/building_sell.wav")) { std::cerr << "Nie mozna wczytac building_sell.wav\n"; }
+    m_buildingSellSound.setBuffer(m_buildingSellBuffer);
+    if (!m_cashRegisterBuffer.loadFromFile("audio/cash_register.wav")) { std::cerr << "Nie mozna wczytac cash_register.wav\n"; }
+    m_cashRegisterSound.setBuffer(m_cashRegisterBuffer);
+    if (!m_repairBuffer.loadFromFile("audio/repair_sound.wav")) { std::cerr << "Nie mozna wczytac repair_sound.wav\n"; }
+    m_repairSound.setBuffer(m_repairBuffer);
 
     const unsigned WIN_W = 1200, WIN_H = 800;
+
+    m_notificationText.setFont(m_font);
+    m_notificationText.setCharacterSize(32);
+    m_notificationText.setFillColor(sf::Color::Red);
+    m_notificationText.setOutlineColor(sf::Color::Black);
+    m_notificationText.setOutlineThickness(2.f);
+    m_notificationText.setPosition(WIN_W / 2.f, 50.f);
 
     m_demolishCancelText.setFont(m_font);
     m_demolishCancelText.setString("[ESC] Anuluj");
@@ -77,10 +98,10 @@ Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures)
     m_closeButtonText.setString("Zamknij"); m_closeButtonText.setFont(m_font); m_closeButtonText.setCharacterSize(24);
     m_closeButtonText.setPosition(m_closeButton.getPosition().x + (m_closeButton.getSize().x - m_closeButtonText.getLocalBounds().width)/2.f, m_closeButton.getPosition().y + 10.f);
 
-    m_tooltip.initialize(m_font);
-
     m_optionsPanel.setSize({500.f, 400.f});
     m_optionsPanel.setFillColor({40, 40, 60, 220});
+    m_optionsPanel.setOutlineColor({120, 120, 150, 255});
+    m_optionsPanel.setOutlineThickness(2.f);
     m_optionsPanel.setPosition((WIN_W - 500.f) / 2.f, (WIN_H - 400.f) / 2.f);
     m_optionsMenuTitle.setString("Opcje");
     m_optionsMenuTitle.setFont(m_font); m_optionsMenuTitle.setCharacterSize(32); m_optionsMenuTitle.setFillColor(sf::Color::White);
@@ -102,6 +123,47 @@ Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures)
     m_cancelButtonText.setString("Anuluj"); m_cancelButtonText.setFont(m_font); m_cancelButtonText.setCharacterSize(24);
     m_cancelButtonText.setPosition(m_cancelButton.getPosition().x + (m_cancelButton.getSize().x - m_cancelButtonText.getLocalBounds().width)/2.f, m_cancelButton.getPosition().y + 10.f);
 
+    m_weatherBoardExpanded = false;
+    m_weatherBoardBG.setSize({300.f, 40.f});
+    m_weatherBoardBG.setFillColor(sf::Color(0,0,0,100));
+    m_weatherBoardBG.setOutlineColor(sf::Color::White);
+    m_weatherBoardBG.setOutlineThickness(1.f);
+    m_weatherBoardBG.setPosition((WIN_W - 300.f) / 2.f, 5.f);
+    m_weatherIconPlaceholder.setRadius(15.f);
+    m_weatherIconPlaceholder.setOrigin(15.f, 15.f);
+    m_weatherIconPlaceholder.setPosition(m_weatherBoardBG.getPosition().x + 25.f, m_weatherBoardBG.getPosition().y + 20.f);
+    m_weatherStatusText.setFont(m_font);
+    m_weatherStatusText.setCharacterSize(18);
+    m_weatherStatusText.setFillColor(sf::Color::White);
+    m_weatherStatusText.setPosition(m_weatherBoardBG.getPosition().x + 50.f, m_weatherBoardBG.getPosition().y + 8.f);
+
+    m_weatherPanel.setSize({600, 400});
+    m_weatherPanel.setFillColor(sf::Color(40,40,60,240));
+    m_weatherPanel.setOutlineColor(sf::Color::White);
+    m_weatherPanel.setOutlineThickness(2.f);
+    m_weatherPanel.setPosition((WIN_W - 600.f)/2.f, (WIN_H - 400.f)/2.f);
+    m_weatherPanelTitle.setFont(m_font);
+    m_weatherPanelTitle.setString("Centrum Prognoz");
+    m_weatherPanelTitle.setCharacterSize(32);
+    m_weatherPanelTitle.setFillColor(sf::Color::White);
+    m_weatherPanelTitle.setPosition(m_weatherPanel.getPosition().x + (m_weatherPanel.getSize().x - m_weatherPanelTitle.getGlobalBounds().width)/2.f, m_weatherPanel.getPosition().y + 10.f);
+    m_weatherPanelCurrentLabel.setFont(m_font);
+    m_weatherPanelCurrentLabel.setString("Aktualna pogoda:");
+    m_weatherPanelCurrentLabel.setCharacterSize(24);
+    m_weatherPanelCurrentLabel.setFillColor(sf::Color(200,200,200));
+    m_weatherPanelCurrentLabel.setPosition(m_weatherPanel.getPosition().x + 20.f, m_weatherPanel.getPosition().y + 70.f);
+    m_weatherPanelCurrentDesc.setFont(m_font);
+    m_weatherPanelCurrentDesc.setCharacterSize(20);
+    m_weatherPanelCurrentDesc.setFillColor(sf::Color::White);
+    m_weatherPanelCurrentDesc.setPosition(m_weatherPanel.getPosition().x + 20.f, m_weatherPanel.getPosition().y + 110.f);
+    m_weatherPanelForecastLabel.setFont(m_font);
+    m_weatherPanelForecastLabel.setString("Prognoza:");
+    m_weatherPanelForecastLabel.setCharacterSize(24);
+    m_weatherPanelForecastLabel.setFillColor(sf::Color(200,200,200));
+    m_weatherPanelForecastLabel.setPosition(m_weatherPanel.getPosition().x + 20.f, m_weatherPanel.getPosition().y + 200.f);
+
+    m_tooltip.initialize(m_font);
+
     reset();
 }
 
@@ -118,9 +180,73 @@ void Game::reset() {
     m_isBuildMode = false;
     m_hoveredBuilding = nullptr;
     m_tooltip.hide();
+    m_weatherBoardExpanded = false;
     currentSaveName.clear();
     m_grid.initialize({0.f, 121.f}, GameConstants::GRID_COLS, GameConstants::GRID_ROWS, GameConstants::GRID_CELL_SIZE);
+
+    m_forecast.clear();
+    environmentHealth = 100.f;
+    for(int i = 0; i < FORECAST_LENGTH + 1; ++i) {
+        changeWeather();
+    }
 }
+
+WeatherType generateNextWeather(float environmentHealth, std::mt19937& rng) {
+    std::vector<WeatherType> possibleWeathers;
+    std::vector<double> weights;
+
+    if (environmentHealth > 75) {
+        possibleWeathers = { WeatherType::Sunny, WeatherType::Windy, WeatherType::Cloudy, WeatherType::Rain, WeatherType::Storm };
+        weights          = { 40, 20, 15, 20, 5 };
+    } else if (environmentHealth > 40) {
+        possibleWeathers = { WeatherType::Sunny, WeatherType::Windy, WeatherType::Cloudy, WeatherType::Rain, WeatherType::Storm, WeatherType::AcidRain };
+        weights          = { 15, 20, 30, 10, 20, 5 };
+    } else {
+        possibleWeathers = { WeatherType::Cloudy, WeatherType::Storm, WeatherType::AcidRain, WeatherType::Heatwave, WeatherType::Smog };
+        weights          = { 20, 30, 25, 15, 10 };
+    }
+
+    std::discrete_distribution<int> weatherDist(weights.begin(), weights.end());
+    return possibleWeathers[weatherDist(rng)];
+}
+
+void Game::changeWeather() {
+    if (m_forecast.empty()) {
+        m_currentWeather = WeatherType::Sunny;
+    } else {
+        m_currentWeather = m_forecast.front();
+        m_forecast.pop_front();
+    }
+
+    m_forecast.push_back(generateNextWeather(environmentHealth, m_rng));
+    m_weatherTimer = m_weatherTimeDist(m_rng);
+
+    switch (m_currentWeather) {
+    case WeatherType::Sunny:
+        m_weatherEffectMultiplierSolar = 1.25f; m_weatherEffectMultiplierWind = 0.9f; break;
+    case WeatherType::Windy:
+        m_weatherEffectMultiplierSolar = 1.0f; m_weatherEffectMultiplierWind = 1.3f; break;
+    case WeatherType::Cloudy:
+        m_weatherEffectMultiplierSolar = 0.7f; m_weatherEffectMultiplierWind = 1.0f; break;
+    case WeatherType::Rain:
+        m_weatherEffectMultiplierSolar = 0.5f; m_weatherEffectMultiplierWind = 1.0f; break;
+    case WeatherType::Storm:
+        m_weatherEffectMultiplierSolar = 0.1f; m_weatherEffectMultiplierWind = 1.6f; break;
+    case WeatherType::AcidRain:
+        m_weatherEffectMultiplierSolar = 0.6f; m_weatherEffectMultiplierWind = 1.0f; break;
+    case WeatherType::Heatwave:
+        m_weatherEffectMultiplierSolar = 0.5f; m_weatherEffectMultiplierWind = 0.5f; break;
+    case WeatherType::Smog:
+        m_weatherEffectMultiplierSolar = 0.05f; m_weatherEffectMultiplierWind = 0.8f; break;
+    }
+
+    m_weatherStatusText.setString(getWeatherName(m_currentWeather));
+    m_weatherIconPlaceholder.setFillColor(getWeatherColor(m_currentWeather));
+    m_weatherPanelCurrentDesc.setString(getWeatherDescription(m_currentWeather));
+
+    std::cout << "ZMIANA POGODY (Zdrowie: " << (int)environmentHealth << "%): " << getWeatherName(m_currentWeather) << " (na " << m_weatherTimer << "s)\n";
+}
+
 
 void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState& currentState, sf::Sound& clickSound) {
     if (m_tooltip.isVisible() && !m_demolishModeActive) {
@@ -131,11 +257,29 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
     }
 
     if (currentState == GameState::Playing) {
+        if (ev.type == sf::Event::MouseButtonPressed && ev.mouseButton.button == sf::Mouse::Left) {
+            sf::Vector2f pos = window.mapPixelToCoords({ev.mouseButton.x, ev.mouseButton.y});
+            if (m_weatherBoardBG.getGlobalBounds().contains(pos)) {
+                m_weatherBoardExpanded = !m_weatherBoardExpanded;
+                return;
+            }
+            if (m_weatherBoardExpanded && !m_weatherPanel.getGlobalBounds().contains(pos)) {
+                m_weatherBoardExpanded = false;
+                return;
+            }
+        }
+
+        if (m_weatherBoardExpanded) return;
+
         if (ev.type == sf::Event::KeyPressed) {
             if (ev.key.code == sf::Keyboard::P) { currentState = GameState::PauseMenu; return; }
             if (ev.key.code == sf::Keyboard::Escape) {
                 if (m_demolishModeActive) { m_demolishModeActive = false; }
-                if (m_isBuildMode) { m_buildMenu.cancelDragging(); m_isBuildMode = false; }
+                if (m_isBuildMode) {
+                    m_buildMenu.cancelDragging();
+                    m_isBuildMode = false;
+                    m_hammerPressed = false;
+                }
             }
         }
 
@@ -171,21 +315,20 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
                     }
                     m_buildMenu.cancelDragging();
                     m_isBuildMode = false;
+                    m_hammerPressed = false;
                 } else if (ev.mouseButton.button == sf::Mouse::Right) {
                     m_buildMenu.cancelDragging();
                     m_isBuildMode = false;
+                    m_hammerPressed = false;
                 }
             }
         } else {
             if (ev.type == sf::Event::MouseButtonPressed && ev.mouseButton.button == sf::Mouse::Left) {
                 sf::Vector2f pos = window.mapPixelToCoords({ev.mouseButton.x, ev.mouseButton.y});
 
-                // ZMIANA: Przebudowa logiki kliknięć
-                // 1. Kliknięcie na przycisk ulepszenia w tooltipie jest już obsłużone na górze funkcji
                 if (m_tooltip.isVisible() && m_tooltip.isUpgradeClicked()) {
-                    // Akcja już wykonana, nie rób nic więcej
+                    // Akcja już wykonana
                 }
-                // 2. Obsługa trybu burzenia
                 else if (m_demolishModeActive) {
                     for (auto it = placedObjects.begin(); it != placedObjects.end(); ++it) {
                         if (it->sprite.getGlobalBounds().contains(pos)) {
@@ -196,16 +339,33 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
                             }
                             m_grid.freeArea(it->gridPosition, it->sizeInCells);
                             placedObjects.erase(it);
-                            clickSound.play();
+                            m_buildingSellSound.play();
                             m_demolishModeActive = false;
                             break;
                         }
                     }
                 }
-                // 3. Obsługa przycisków UI i kliknięć na budynki
                 else {
                     bool uiClicked = false;
-                    if (m_hammerHotspot.contains(pos)) {
+                    for (auto& obj : placedObjects) {
+                        if (obj.isDamaged && obj.sprite.getGlobalBounds().contains(pos)) {
+                            int repairCost = obj.price / 4;
+                            if (currentMoney >= repairCost) {
+                                currentMoney -= repairCost;
+                                obj.isDamaged = false;
+                                obj.sprite.setColor(sf::Color::White);
+                                m_repairSound.play();
+                                showNotification("Naprawiono budynek!");
+                            } else {
+                                showNotification("Brak srodkow na naprawe!");
+                            }
+                            uiClicked = true;
+                            break;
+                        }
+                    }
+
+                    if (uiClicked) { /* Już obsłużone */ }
+                    else if (m_hammerHotspot.contains(pos)) {
                         clickSound.play();
                         m_hammerPressed = !m_hammerPressed;
                         m_buildMenu.setVisible(m_hammerPressed);
@@ -231,11 +391,9 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
                         uiClicked = true;
                     }
 
-                    // Jeśli nie kliknięto żadnego przycisku UI, sprawdź kliknięcie na budynek
                     if (!uiClicked) {
                         for (auto it = placedObjects.rbegin(); it != placedObjects.rend(); ++it) {
                             if (it->sprite.getGlobalBounds().contains(pos)) {
-                                // Odtwarzaj dźwięk tylko jeśli tooltip nie jest widoczny LUB jeśli kliknięcie nie było na jego przycisku
                                 if (!m_tooltip.isVisible() || !m_tooltip.isUpgradeClicked()) {
                                     switch (it->typeId) {
                                     case GameConstants::SOLAR_PANEL_ID: m_solarPanelSound.play(); break;
@@ -250,7 +408,10 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
                 }
             }
             if (m_buildMenu.isVisible()) {
-                m_buildMenu.handleEvent(ev, window, currentMoney);
+                BuildMenu::ClickResult result = m_buildMenu.handleEvent(ev, window, currentMoney);
+                if (result == BuildMenu::ClickResult::NotEnoughMoney) {
+                    showNotification("Brak wystarczajacych srodkow");
+                }
             }
         }
     }
@@ -262,9 +423,12 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
         if (ev.type == sf::Event::MouseButtonPressed) {
             sf::Vector2f pos = window.mapPixelToCoords({ev.mouseButton.x, ev.mouseButton.y});
             if (m_sellButton.getGlobalBounds().contains(pos)) {
-                clickSound.play();
-                currentMoney += currentEnergy * GameConstants::ENERGY_SELL_PRICE;
-                currentEnergy = 0;
+                if (currentEnergy > 0) {
+                    m_cashRegisterSound.play();
+                    currentMoney += currentEnergy * GameConstants::ENERGY_SELL_PRICE;
+                    currentEnergy = 0;
+                    m_hud.flashMoney();
+                }
                 currentState = GameState::Playing;
             } else if (m_closeButton.getGlobalBounds().contains(pos)) {
                 clickSound.play();
@@ -288,7 +452,6 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
                 clickSound.play();
                 musicVolume = m_musicSlider->getValue();
                 sfxVolume = m_sfxSlider->getValue();
-                std::cout << "Zastosowano nowe ustawienia dzwieku w grze!\n";
                 currentState = GameState::Playing;
             }
             else if (m_cancelButton.getGlobalBounds().contains(pos)) {
@@ -311,6 +474,7 @@ void Game::upgradeBuilding(PlacedObject& building) {
     case GameConstants::SOLAR_PANEL_ID: data = &GameConstants::SOLAR_PANEL_DATA; break;
     case GameConstants::WIND_TURBINE_ID: data = &GameConstants::WIND_TURBINE_DATA; break;
     case GameConstants::ENERGY_STORAGE_ID: data = &GameConstants::STORAGE_DATA; break;
+    case GameConstants::AIR_FILTER_ID: data = &GameConstants::AIR_FILTER_DATA; break;
     }
 
     if(data) {
@@ -329,14 +493,56 @@ void Game::upgradeBuilding(PlacedObject& building) {
         m_upgradeSound.play();
         m_tooltip.show(building, currentMoney);
     } else {
-        std::cout << "Za malo pieniedzy na ulepszenie!\n";
+        showNotification("Brak wystarczajacych srodkow");
     }
 }
 
 void Game::update(float dt) {
     totalGameTimeSeconds += dt;
+
+    if (m_showNotification && m_notificationClock.getElapsedTime().asSeconds() > 2.0f) {
+        m_showNotification = false;
+    }
+
+    m_weatherTimer -= dt;
+    if (m_weatherTimer <= 0.f) {
+        changeWeather();
+    }
+
+    switch (m_currentWeather) {
+    case WeatherType::Rain:
+        environmentHealth += 0.05f * dt;
+        break;
+    case WeatherType::AcidRain:
+        environmentHealth -= 0.2f * dt;
+        if (m_damageDist(m_rng) < 0.1f * dt && !placedObjects.empty()) {
+            int objIdx = std::uniform_int_distribution<int>(0, placedObjects.size() - 1)(m_rng);
+            if (!placedObjects[objIdx].isDamaged) {
+                placedObjects[objIdx].isDamaged = true;
+                placedObjects[objIdx].sprite.setColor(sf::Color(255, 100, 100));
+                showNotification("Kwasny deszcz uszkodzil budynek!");
+            }
+        }
+        break;
+    case WeatherType::Storm:
+        if (m_damageDist(m_rng) < 0.2f * dt && !placedObjects.empty()) {
+            int objIdx = std::uniform_int_distribution<int>(0, placedObjects.size() - 1)(m_rng);
+            if (!placedObjects[objIdx].isDamaged) {
+                placedObjects[objIdx].isDamaged = true;
+                placedObjects[objIdx].sprite.setColor(sf::Color(255, 100, 100));
+                showNotification("Burza uszkodzila budynek!");
+            }
+        }
+        break;
+    case WeatherType::Smog:
+        environmentHealth -= 0.5f * dt;
+        break;
+    default: break;
+    }
+    if (environmentHealth < 0) environmentHealth = 0;
+
     for (auto& obj : placedObjects) {
-        if(obj.logic) {
+        if(obj.logic && !obj.isDamaged) {
             obj.logic->update(dt, *this, obj);
             sf::IntRect textureRect = obj.logic->getTextureRect();
             if (textureRect.width != 0) {
@@ -348,16 +554,60 @@ void Game::update(float dt) {
     if (m_demolishModeActive) m_bulldozerSprite.setColor(sf::Color(180, 255, 180));
     else m_bulldozerSprite.setColor(sf::Color::White);
 
-    // ZMIANA: Ściszenie dźwięków budynków
     float buildingSoundVolume = (this->sfxVolume * 100.f) / 2.f;
     m_solarPanelSound.setVolume(buildingSoundVolume);
     m_windTurbineSound.setVolume(buildingSoundVolume);
     m_energyStorageSound.setVolume(buildingSoundVolume);
     m_upgradeSound.setVolume(this->sfxVolume * 100.f);
+    m_buildingPlaceSound.setVolume(this->sfxVolume * 100.f);
+    m_buildingSellSound.setVolume(this->sfxVolume * 100.f);
+    m_cashRegisterSound.setVolume(this->sfxVolume * 100.f);
+    m_repairSound.setVolume(this->sfxVolume * 100.f);
 
     if (currentEnergy > maxEnergy) currentEnergy = maxEnergy;
     if (environmentHealth > 100.f) environmentHealth = 100.f;
     m_hud.update(currentMoney, currentEnergy, maxEnergy, environmentHealth, totalGameTimeSeconds);
+}
+
+void Game::drawWeatherUI(sf::RenderWindow& window) {
+    window.draw(m_weatherBoardBG);
+    window.draw(m_weatherIconPlaceholder);
+    window.draw(m_weatherStatusText);
+
+    if (m_weatherBoardExpanded) {
+        window.draw(m_weatherPanel);
+        window.draw(m_weatherPanelTitle);
+        window.draw(m_weatherPanelCurrentLabel);
+        window.draw(m_weatherPanelCurrentDesc);
+        window.draw(m_weatherPanelForecastLabel);
+
+        float startX = m_weatherPanel.getPosition().x + 40.f;
+        float startY = m_weatherPanel.getPosition().y + 250.f;
+        for (size_t i = 0; i < m_forecast.size(); ++i) {
+            sf::CircleShape icon(20.f);
+            icon.setOrigin(20.f, 20.f);
+            icon.setFillColor(getWeatherColor(m_forecast[i]));
+            icon.setPosition(startX + i * 110.f, startY + 30.f);
+
+            sf::Text name = sf::Text(getWeatherName(m_forecast[i]), m_font, 16);
+            name.setFillColor(sf::Color::White);
+            sf::FloatRect textRect = name.getLocalBounds();
+            name.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
+            name.setPosition(startX + i * 110.f, startY + 70.f);
+
+            window.draw(icon);
+            window.draw(name);
+        }
+    }
+}
+
+void Game::drawDamagedIcons(sf::RenderWindow& window) {
+    for (const auto& obj : placedObjects) {
+        if (obj.isDamaged) {
+            m_repairIconSprite.setPosition(obj.sprite.getPosition());
+            window.draw(m_repairIconSprite);
+        }
+    }
 }
 
 void Game::draw(sf::RenderWindow& window) {
@@ -367,6 +617,8 @@ void Game::draw(sf::RenderWindow& window) {
     for (const auto& obj : placedObjects) {
         window.draw(obj.sprite);
     }
+
+    drawDamagedIcons(window);
 
     if (m_isBuildMode) {
         window.draw(m_buildModeOverlay);
@@ -388,10 +640,24 @@ void Game::draw(sf::RenderWindow& window) {
         window.draw(m_demolishCancelText);
     }
     m_tooltip.draw(window);
+
+    drawWeatherUI(window);
+
+    if (m_showNotification) {
+        window.draw(m_notificationText);
+    }
 }
 
 void Game::drawForPause(sf::RenderWindow& window) {
     draw(window);
+}
+
+void Game::showNotification(const std::string& message) {
+    m_notificationText.setString(message);
+    sf::FloatRect textRect = m_notificationText.getLocalBounds();
+    m_notificationText.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
+    m_showNotification = true;
+    m_notificationClock.restart();
 }
 
 void Game::placeBuilding(int typeId, int price, sf::Vector2f position, bool fromPlayerAction) {
@@ -399,7 +665,7 @@ void Game::placeBuilding(int typeId, int price, sf::Vector2f position, bool from
     sf::Vector2i buildingSize = getBuildingSize(typeId);
 
     if (fromPlayerAction && !m_grid.isAreaFree(gridPos, buildingSize)) {
-        std::cout << "Miejsce zajete!\n";
+        showNotification("To miejsce jest juz zajete!");
         return;
     }
 
@@ -410,6 +676,7 @@ void Game::placeBuilding(int typeId, int price, sf::Vector2f position, bool from
     newObj.level = 1;
     newObj.gridPosition = gridPos;
     newObj.sizeInCells = buildingSize;
+    newObj.isDamaged = false;
 
     if (!newObj.logic) return;
 
@@ -434,6 +701,7 @@ void Game::placeBuilding(int typeId, int price, sf::Vector2f position, bool from
         if (typeId == GameConstants::ENERGY_STORAGE_ID) {
             maxEnergy += GameConstants::STORAGE_DATA.value[0];
         }
+        m_buildingPlaceSound.play();
     }
 
     m_grid.occupyArea(gridPos, buildingSize);
