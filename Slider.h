@@ -3,31 +3,48 @@
 
 #include <SFML/Graphics.hpp>
 
-// A draggable slider with a track and a thumb that returns values in [0,1]
+// ===================================================================================
+//
+//  PLIK NAGŁÓWKOWY DLA KLASY SLIDER
+//
+//  Definiuje klasę `Slider`, która implementuje graficzny suwak.
+//  Jest to komponent UI wielokrotnego użytku, który pozwala użytkownikowi
+//  wybrać wartość z określonego przedziału poprzez przeciąganie uchwytu.
+//  Wartość zwracana jest znormalizowana do przedziału [0.0, 1.0].
+//
+// ===================================================================================
+
 class Slider {
 public:
-    // sliderX, sliderY – top-left of track
-    // width, height     – size of track
-    // thumbRadius       – radius of the draggable circle
+    // --- Metody publiczne ---
+
+    // Konstruktor tworzący suwak.
+    // sliderX, sliderY – pozycja lewego górnego rogu ścieżki suwaka.
+    // width, height     – wymiary ścieżki suwaka.
+    // thumbRadius       – promień okrągłego uchwytu.
     Slider(float sliderX, float sliderY, float width, float height, float thumbRadius);
 
-    // Handle mouse down/up/move for dragging
+    // Przetwarza zdarzenia (eventy) z okna, np. kliknięcia i ruch myszą.
+    // Metoda ta odpowiada za logikę przeciągania uchwytu suwaka.
     void handleEvent(const sf::Event& e, const sf::RenderWindow& window);
 
-    // Draw track and thumb
+    // Rysuje suwak (jego ścieżkę i uchwyt) w podanym oknie.
     void draw(sf::RenderWindow& window) const;
 
-    // Get normalized value (0.0–1.0)
+    // Zwraca aktualną wartość suwaka jako liczbę z przedziału od 0.0 do 1.0.
     float getValue() const;
 
-    // Set thumb position by normalized value (0.0–1.0)
+    // Ustawia pozycję uchwytu na podstawie znormalizowanej wartości (od 0.0 do 1.0).
     void setValue(float value);
 
 private:
-    sf::RectangleShape _track;
-    sf::CircleShape    _thumb;
-    float              _x, _y, _w, _h;
-    bool               _drag = false;
+    // --- Prywatne pola klasy ---
+
+    sf::RectangleShape _track; // Kształt reprezentujący ścieżkę suwaka.
+    sf::CircleShape    _thumb; // Kształt reprezentujący uchwyt suwaka.
+
+    float _x, _y, _w, _h;      // Przechowuje pozycję i wymiary dla łatwiejszych obliczeń.
+    bool _drag = false;        // Flaga, która jest `true`, gdy użytkownik przeciąga uchwyt.
 };
 
 #endif // SLIDER_H

@@ -2,73 +2,35 @@
 #include "Game.h"
 #include <cmath>
 
+// ===================================================================================
+//
+//  PLIK IMPLEMENTACYJNY DLA KLAS BUDYNKÓW
+//
+//  Zawiera implementacje metod `update` dla poszczególnych typów budynków.
+//
+//  UWAGA: Większość kluczowej logiki (produkcja energii, wpływ na środowisko)
+//  została przeniesiona do klasy `Game` w celu centralizacji obliczeń.
+//  Metody `update` w budynkach odpowiadają głównie za aspekty wizualne,
+//  takie jak animacje, które są specyficzne dla danego typu.
+//
+// ===================================================================================
+
+// Metoda `update` dla magazynu energii. Obecnie pusta.
 void EnergyStorage::update(float dt, Game& game, PlacedObject& self) {
-    game.environmentHealth += GameConstants::STORAGE_DATA.envEffect[self.level - 1] * dt;
+    // Logika wpływu na środowisko została przeniesiona do Game::update
 }
 
+// Metoda `update` dla paneli słonecznych. Obecnie pusta.
 void SolarPanel::update(float dt, Game& game, PlacedObject& self) {
-    float productionRate = GameConstants::SOLAR_PANEL_DATA.value[self.level - 1];
-
-    // ##### ZMIANA #####
-    // Odwołujemy się do WeatherManager, aby pobrać modyfikator
-    m_productionAccumulator += productionRate * game.getWeatherManager().getWeatherMultiplierSolar() * dt;
-    // ##################
-
-    if (m_productionAccumulator >= 1.f) {
-        int energyGained = static_cast<int>(floor(m_productionAccumulator));
-        if (game.currentEnergy < game.maxEnergy) {
-            game.currentEnergy += energyGained;
-        }
-        m_productionAccumulator -= energyGained;
-    }
-
-    game.environmentHealth += GameConstants::SOLAR_PANEL_DATA.envEffect[self.level - 1] * dt;
+    // Ta logika nie jest już potrzebna, ponieważ produkcja jest liczona globalnie w Game::update
 }
 
-WindTurbine::WindTurbine() : m_currentFrame(0) {}
-
+// Metoda `update` dla turbiny wiatrowej. Obecnie pusta.
 void WindTurbine::update(float dt, Game& game, PlacedObject& self) {
-    float energyRate = GameConstants::WIND_TURBINE_DATA.value[self.level - 1];
-
-    // ##### ZMIANA #####
-    // Odwołujemy się do WeatherManager, aby pobrać modyfikator
-    m_productionAccumulator += energyRate * game.getWeatherManager().getWeatherMultiplierWind() * dt;
-    // ##################
-
-    if (m_productionAccumulator >= 1.f) {
-        int energyGained = static_cast<int>(floor(m_productionAccumulator));
-        if (game.currentEnergy < game.maxEnergy) {
-            game.currentEnergy += energyGained;
-        }
-        m_productionAccumulator -= energyGained;
-    }
-
-    float envRate = GameConstants::WIND_TURBINE_DATA.envEffect[self.level - 1];
-    if (game.environmentHealth < 100.f) {
-        game.environmentHealth += envRate * dt;
-    }
-
-    if (m_animClock.getElapsedTime().asSeconds() > GameConstants::TURBINE_ANIM_SPEED_SEC) {
-        m_currentFrame = (m_currentFrame + 1) % GameConstants::TURBINE_FRAME_COUNT;
-        m_animClock.restart();
-    }
+    // Logika produkcji przeniesiona do Game::update
 }
 
-sf::IntRect WindTurbine::getTextureRect() const {
-    return sf::IntRect(
-        m_currentFrame * GameConstants::TURBINE_FRAME_WIDTH,
-        0,
-        GameConstants::TURBINE_FRAME_WIDTH,
-        GameConstants::TURBINE_FRAME_HEIGHT
-        );
-}
-
+// Metoda `update` dla stacji filtrowania. Obecnie pusta.
 void AirFilter::update(float dt, Game& game, PlacedObject& self) {
-    float energyNeeded = GameConstants::AIR_FILTER_DATA.value[self.level - 1] * dt;
-    if (game.currentEnergy >= static_cast<int>(ceil(energyNeeded))) {
-        game.currentEnergy -= static_cast<int>(ceil(energyNeeded));
-
-        float envRegen = GameConstants::AIR_FILTER_DATA.envEffect[self.level - 1];
-        game.environmentHealth += envRegen * dt;
-    }
+    // Logika zużycia energii przeniesiona do Game::update
 }

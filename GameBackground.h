@@ -4,33 +4,49 @@
 #include <SFML/Graphics.hpp>
 #include <string>
 
-// Klasa odpowiada za wczytanie i rysowanie tła gry.
-// Plik PNG powinien mieć wymiary 1200×800 px.
+// ===================================================================================
+//
+//  PLIK NAGŁÓWKOWY DLA KLASY GAMEBACKGROUND
+//
+//  Prosta klasa, której jedynym zadaniem jest wczytanie i narysowanie
+//  grafiki tła dla głównego ekranu rozgrywki.
+//
+// ===================================================================================
+
 class GameBackground {
 public:
+    // --- Konstruktory ---
     GameBackground() = default;
     ~GameBackground() = default;
 
-    // Wczytuje teksturę z podanej ścieżki. Zwraca false, jeśli nie udało się wczytać.
+    // --- Metody publiczne ---
+
+    // Wczytuje teksturę tła z podanej ścieżki pliku.
+    // Zwraca `true`, jeśli wczytywanie się powiodło, w przeciwnym razie `false`.
     bool loadFromFile(const std::string& filename) {
         if (!m_texture.loadFromFile(filename))
             return false;
+
         m_sprite.setTexture(m_texture);
-        // Zakładamy, że obraz ma już wymiary 1200×800 – nie skalujemy.
-        // Jeśli wymiary byłyby inne, można dopasować:
+
+        // Skaluje wczytaną grafikę, aby dopasować ją do wymiarów okna (1200x800).
+        // Dzięki temu obraz tła zawsze wypełni całe okno.
         auto [w, h] = m_texture.getSize();
         m_sprite.setScale(1200.f / float(w), 800.f / float(h));
+
         return true;
     }
 
-    // Rysuje tło gry w oknie.
+    // Rysuje tło w podanym oknie.
     void draw(sf::RenderWindow& window) const {
         window.draw(m_sprite);
     }
 
 private:
-    sf::Texture m_texture;
-    sf::Sprite  m_sprite;
+    // --- Prywatne pola klasy ---
+
+    sf::Texture m_texture; // Tekstura przechowująca wczytaną grafikę tła.
+    sf::Sprite  m_sprite;  // Obiekt Sprite, który jest rysowany na ekranie.
 };
 
 #endif // GAMEBACKGROUND_H

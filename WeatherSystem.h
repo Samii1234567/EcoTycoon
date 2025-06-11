@@ -4,12 +4,30 @@
 #include <string>
 #include <SFML/Graphics.hpp>
 
-// Enum przechowujący wszystkie możliwe stany pogody
+// ===================================================================================
+//
+//  PLIK NAGŁÓWKOWY DLA SYSTEMU POGODY
+//
+//  Ten plik nie zawiera logiki, a jedynie dane i proste funkcje pomocnicze
+//  związane z pogodą. Definiuje typy pogody oraz dostarcza funkcje do
+//  pobierania ich nazw, opisów i ścieżek do ikon.
+//  Dzięki temu wszystkie teksty i ścieżki są w jednym miejscu.
+//
+// ===================================================================================
+
+// Typ wyliczeniowy reprezentujący wszystkie możliwe zjawiska pogodowe w grze.
 enum class WeatherType {
-    Sunny, Windy, Cloudy, Rain, Storm, AcidRain, Heatwave, Smog
+    Sunny,      // Słonecznie
+    Windy,      // Wietrznie
+    Cloudy,     // Pochmurno
+    Rain,       // Deszcz
+    Storm,      // Burza
+    AcidRain,   // Kwaśny Deszcz
+    Heatwave,   // Fala Upałów
+    Smog        // Smog
 };
 
-// Funkcja pomocnicza do uzyskania nazwy pogody jako string
+// Zwraca polską nazwę dla danego typu pogody.
 inline std::string getWeatherName(WeatherType type) {
     switch (type) {
     case WeatherType::Sunny:     return "Slonecznie";
@@ -24,8 +42,7 @@ inline std::string getWeatherName(WeatherType type) {
     }
 }
 
-// ##### NOWA FUNKCJA #####
-// Funkcja zwracająca nazwę pliku z ikoną pogody
+// Zwraca ścieżkę do pliku z ikoną dla danego typu pogody.
 inline std::string getWeatherIconFilename(WeatherType type) {
     switch (type) {
     case WeatherType::Sunny:     return "images/sunny_weather.png";
@@ -36,27 +53,11 @@ inline std::string getWeatherIconFilename(WeatherType type) {
     case WeatherType::AcidRain:  return "images/acid_rain_weather.png";
     case WeatherType::Heatwave:  return "images/heatwave_weather.png";
     case WeatherType::Smog:      return "images/smog_weather.png";
-    default:                     return ""; // Zwróć pusty string w razie błędu
-    }
-}
-// #########################
-
-// Funkcja zwracająca kolor dla ikony-placeholdera (zostaje jako rezerwa)
-inline sf::Color getWeatherColor(WeatherType type) {
-    switch (type) {
-    case WeatherType::Sunny:     return sf::Color::Yellow;
-    case WeatherType::Windy:     return sf::Color(200, 200, 200);
-    case WeatherType::Cloudy:    return sf::Color(128, 128, 128);
-    case WeatherType::Rain:      return sf::Color::Blue;
-    case WeatherType::Storm:     return sf::Color(70, 70, 130);
-    case WeatherType::AcidRain:  return sf::Color(100, 200, 100);
-    case WeatherType::Heatwave:  return sf::Color::Red;
-    case WeatherType::Smog:      return sf::Color(100, 80, 50);
-    default:                     return sf::Color::Black;
+    default:                     return "";
     }
 }
 
-// Funkcja zwracająca opis efektów pogodowych
+// Zwraca opis efektów w grze dla danego typu pogody.
 inline std::string getWeatherDescription(WeatherType type) {
     switch (type) {
     case WeatherType::Sunny:     return "Efekty:\n- Panele sloneczne: +25%\n- Turbiny wiatrowe: -10%";

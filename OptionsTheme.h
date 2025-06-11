@@ -2,54 +2,80 @@
 #define OPTIONSTHEME_H
 
 #include <string>
-#include "Theme.h"   // Defines FontStyle, ButtonStyle
+#include "Theme.h" // Importuje definicje struktur FontStyle i ButtonStyle
 
-// Theme for the Options menu, using a pre-rendered background image and slider config
+// ===================================================================================
+//
+//  PLIK DEFINIUJĄCY MOTYW GRAFICZNY DLA MENU OPCJI
+//
+//  Podobnie jak Theme.h, ten plik definiuje wygląd ekranu opcji.
+//  W tym przypadku zamiast opisywania tła gradientem, wskazujemy bezpośrednio
+//  na gotowy plik graficzny. Definiujemy tu również pozycje i wymiary
+//  elementów specyficznych dla tego menu, jak suwaki.
+//
+// ===================================================================================
+
+// Główna struktura opisująca motyw menu opcji.
 struct OptionsTheme {
-    // Path to the pre-generated options menu image
+    // Ścieżka do gotowego obrazu tła dla menu opcji.
     std::string backgroundImagePath;
-    // Title style ("Opcje")
+
+    // Styl głównego tytułu ("Opcje").
     FontStyle title;
-    // Y positions for slider placeholders under the labels
-    float sliderMusicY;
-    float sliderSfxY;
-    // Slider dimensions and thumb radius
-    float sliderWidth;
-    float sliderHeight;
-    float thumbRadius;
-    // Y positions for the Save and Cancel buttons
+
+    // Pozycje pionowe (Y) dla suwaków głośności.
+    float sliderMusicY; // Pozycja suwaka muzyki
+    float sliderSfxY;   // Pozycja suwaka efektów dźwiękowych
+
+    // Wymiary suwaków.
+    float sliderWidth;  // Szerokość ścieżki suwaka
+    float sliderHeight; // Wysokość (grubość) ścieżki suwaka
+    float thumbRadius;  // Promień kółka (uchwytu) suwaka
+
+    // Pozycja pionowa (Y) dla przycisków "Zapisz" i "Anuluj".
     float saveButtonY;
     float cancelButtonY;
-    // Button styles for Save and Cancel
+
+    // Style przycisków.
     ButtonStyle saveButton;
     ButtonStyle cancelButton;
 };
 
+// ===================================================================================
+//  KONKRETNA IMPLEMENTACJA MOTYWU
+// ===================================================================================
+// Inicjalizacja stałej `OPTIONS_THEME` z gotowymi wartościami.
 static const OptionsTheme OPTIONS_THEME = {
-    // Background image path
+    // Ścieżka do tła
     "images/eco_tycoon_options.png",
-    // Title: "Opcje"
+
+    // Styl tytułu
     { "Comfortaa", 48, "#2E7D32", "bold", "center" },
-    // Slider placeholders (Y-coordinates)
-    359.f,  // music slider track Y
-    502.f,  // sfx slider track Y
-    // Slider dimensions
-    490.f,  // sliderWidth
-    6.f,    // sliderHeight
-    15.f,   // thumbRadius
-    // Buttons Y-coordinates
-    580.f,  // saveButtonY
-    580.f,  // cancelButtonY
-    // Save button style
-    { {240, 70},                  // size
-        {"#A5D6A7", "#66BB6A"}, // gradient
-        12,                         // cornerRadius
-        {"Comfortaa", 24, "#FFFFFF", "bold", "center"}, // text
-        16,                         // spacing
-        {{"#81C784", "#4CAF50"}}, // hover gradient
-        {{"#66BB6A", "#388E3C"}}  // active gradient
+
+    // Pozycje suwaków
+    359.f,  // Y dla suwaka muzyki
+    502.f,  // Y dla suwaka efektów
+
+    // Wymiary suwaków
+    490.f,  // Szerokość
+    6.f,    // Grubość ścieżki
+    15.f,   // Promień uchwytu
+
+    // Pozycja Y przycisków
+    580.f,
+    580.f,
+
+    // Styl przycisku "Zapisz"
+    { {240, 70},
+        {"#A5D6A7", "#66BB6A"},
+        12,
+        {"Comfortaa", 24, "#FFFFFF", "bold", "center"},
+        16,
+        {{"#81C784", "#4CAF50"}},
+        {{"#66BB6A", "#388E3C"}}
     },
-    // Cancel button style
+
+    // Styl przycisku "Anuluj" (w tym projekcie identyczny jak "Zapisz")
     { {240, 70},
         {"#A5D6A7", "#66BB6A"},
         12,
