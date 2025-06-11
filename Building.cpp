@@ -8,7 +8,11 @@ void EnergyStorage::update(float dt, Game& game, PlacedObject& self) {
 
 void SolarPanel::update(float dt, Game& game, PlacedObject& self) {
     float productionRate = GameConstants::SOLAR_PANEL_DATA.value[self.level - 1];
-    m_productionAccumulator += productionRate * game.getWeatherMultiplierSolar() * dt;
+
+    // ##### ZMIANA #####
+    // Odwołujemy się do WeatherManager, aby pobrać modyfikator
+    m_productionAccumulator += productionRate * game.getWeatherManager().getWeatherMultiplierSolar() * dt;
+    // ##################
 
     if (m_productionAccumulator >= 1.f) {
         int energyGained = static_cast<int>(floor(m_productionAccumulator));
@@ -25,7 +29,12 @@ WindTurbine::WindTurbine() : m_currentFrame(0) {}
 
 void WindTurbine::update(float dt, Game& game, PlacedObject& self) {
     float energyRate = GameConstants::WIND_TURBINE_DATA.value[self.level - 1];
-    m_productionAccumulator += energyRate * game.getWeatherMultiplierWind() * dt;
+
+    // ##### ZMIANA #####
+    // Odwołujemy się do WeatherManager, aby pobrać modyfikator
+    m_productionAccumulator += energyRate * game.getWeatherManager().getWeatherMultiplierWind() * dt;
+    // ##################
+
     if (m_productionAccumulator >= 1.f) {
         int energyGained = static_cast<int>(floor(m_productionAccumulator));
         if (game.currentEnergy < game.maxEnergy) {

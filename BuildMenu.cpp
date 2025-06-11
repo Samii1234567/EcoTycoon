@@ -97,13 +97,27 @@ BuildMenu::ClickResult BuildMenu::handleEvent(const sf::Event& ev, sf::RenderWin
                     dragState = DragState{it.id, it.currentPrice};
                     dragState->sprite.setTexture((*itemTexturesRef)[it.id]);
 
+                    // ##### POCZĄTEK ZMIAN - SKALOWANIE PRZECIĄGANEGO BUDYNKU #####
+                    sf::Vector2i buildingSizeInCells = getBuildingSize(it.id);
+                    sf::Vector2f targetSizeInPixels = {
+                        buildingSizeInCells.x * GameConstants::GRID_CELL_SIZE,
+                        buildingSizeInCells.y * GameConstants::GRID_CELL_SIZE
+                    };
+
                     if (it.id == GameConstants::WIND_TURBINE_ID) {
                         dragState->sprite.setTextureRect({0, 0, GameConstants::TURBINE_FRAME_WIDTH, GameConstants::TURBINE_FRAME_HEIGHT});
-                        dragState->sprite.setOrigin(GameConstants::TURBINE_FRAME_WIDTH / 2.f, GameConstants::TURBINE_FRAME_HEIGHT / 2.f);
+
+                        float scale = targetSizeInPixels.x / GameConstants::TURBINE_FRAME_WIDTH;
+                        dragState->sprite.setScale(scale, scale);
+                        dragState->sprite.setOrigin(GameConstants::TURBINE_FRAME_WIDTH / 2.f, GameConstants::TURBINE_FRAME_HEIGHT);
                     } else {
-                        auto texSize = (*itemTexturesRef)[it.id].getSize();
-                        dragState->sprite.setOrigin(texSize.x / 2.f, texSize.y / 2.f);
+                        const auto& tex = (*itemTexturesRef)[it.id];
+                        float sourceWidth = static_cast<float>(tex.getSize().x);
+                        float sourceHeight = static_cast<float>(tex.getSize().y);
+                        dragState->sprite.setScale(targetSizeInPixels.x / sourceWidth, targetSizeInPixels.y / sourceHeight);
+                        dragState->sprite.setOrigin(sourceWidth / 2.f, sourceHeight / 2.f);
                     }
+                    // ##### KONIEC ZMIAN #####
 
                     dragState->sprite.setColor({255, 255, 255, 150});
                     visible = false;
@@ -149,4 +163,8 @@ void BuildMenu::cancelDragging() {
         std::cout << "Anulowano budowanie.\n";
         dragState.reset();
     }
+}
+
+sf::FloatRect BuildMenu::getBackgroundBounds() const {
+    return background.getGlobalBounds();
 }

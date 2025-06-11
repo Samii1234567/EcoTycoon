@@ -2,262 +2,100 @@
 #define GAME_H
 
 #include <SFML/Graphics.hpp>
-#include <SFML/Audio.hpp>
 #include <vector>
 #include <string>
 #include <memory>
-#include <random>
-#include <deque>
 #include "SaveManager.h"
 #include "GameBackground.h"
 #include "BuildMenu.h"
 #include "HUD.h"
 #include "GameState.h"
-#include "Slider.h"
 #include "Building.h"
 #include "Grid.h"
-#include "WeatherSystem.h"
-
-// POCZĄTEK POPRAWKI: Przywrócenie brakującej definicji klasy BuildingTooltip
-class BuildingTooltip {
-public:
-    BuildingTooltip() : m_visible(false), m_upgradeClicked(false) {}
-
-    void initialize(sf::Font& font) {
-        m_background.setSize({220.f, 120.f});
-        m_background.setFillColor(sf::Color(255, 255, 255, 240));
-        m_background.setOutlineColor(sf::Color::Black);
-        m_background.setOutlineThickness(2.f);
-
-        m_titleText.setFont(font);
-        m_titleText.setCharacterSize(16);
-        m_titleText.setStyle(sf::Text::Bold);
-        m_titleText.setFillColor(sf::Color::Black);
-
-        m_levelText.setFont(font);
-        m_levelText.setCharacterSize(14);
-        m_levelText.setFillColor(sf::Color::Black);
-
-        m_infoText.setFont(font);
-        m_infoText.setCharacterSize(14);
-        m_infoText.setFillColor(sf::Color::Black);
-
-        m_upgradeButton.setSize({200.f, 30.f});
-        m_upgradeButtonText.setFont(font);
-        m_upgradeButtonText.setCharacterSize(14);
-        m_upgradeButtonText.setFillColor(sf::Color::White);
-    }
-
-    void show(const PlacedObject& building, int playerMoney) {
-        m_visible = true;
-        m_upgradeClicked = false;
-
-        std::string name;
-        std::string info;
-        int cost = 0;
-        bool maxLevel = (building.level >= GameConstants::MAX_LEVEL);
-
-        switch (building.typeId) {
-        case GameConstants::SOLAR_PANEL_ID:
-            name = "Panel sloneczny";
-            info = "Produkcja: " + std::to_string(GameConstants::SOLAR_PANEL_DATA.value[building.level - 1]) + " E/s";
-            if (!maxLevel) cost = GameConstants::SOLAR_PANEL_DATA.upgradeCost[building.level];
-            break;
-        case GameConstants::WIND_TURBINE_ID:
-            name = "Turbina wiatrowa";
-            info = "Produkcja: " + std::to_string(GameConstants::WIND_TURBINE_DATA.value[building.level - 1]) + " E/s\n";
-            info += "Srodowisko: +" + std::to_string((int)(GameConstants::WIND_TURBINE_DATA.envEffect[building.level - 1]*100)) + "%/s";
-            if (!maxLevel) cost = GameConstants::WIND_TURBINE_DATA.upgradeCost[building.level];
-            break;
-        case GameConstants::ENERGY_STORAGE_ID:
-            name = "Magazyn energii";
-            info = "Pojemnosc: +" + std::to_string(GameConstants::STORAGE_DATA.value[building.level - 1]);
-            if (!maxLevel) cost = GameConstants::STORAGE_DATA.upgradeCost[building.level];
-            break;
-        case GameConstants::AIR_FILTER_ID:
-            name = "Stacja Filtrowania";
-            info = "Koszt: " + std::to_string(GameConstants::AIR_FILTER_DATA.value[building.level - 1]) + " E/s\n";
-            info += "Srodowisko: +" + std::to_string((int)(GameConstants::AIR_FILTER_DATA.envEffect[building.level - 1]*100)) + "%/s";
-            if (!maxLevel) cost = GameConstants::AIR_FILTER_DATA.upgradeCost[building.level];
-            break;
-        }
-
-        m_titleText.setString(name);
-        m_levelText.setString("Poziom: " + std::to_string(building.level));
-        m_infoText.setString(info);
-
-        if (maxLevel) {
-            m_upgradeButtonText.setString("Maksymalny poziom");
-            m_upgradeButton.setFillColor(sf::Color(100, 100, 100));
-        } else {
-            m_upgradeButtonText.setString("Ulepsz (" + std::to_string(cost) + "$)");
-            if(playerMoney >= cost) {
-                m_upgradeButton.setFillColor(sf::Color(90, 160, 90));
-            } else {
-                m_upgradeButton.setFillColor(sf::Color(200, 90, 90));
-            }
-        }
-
-        m_background.setPosition(building.sprite.getPosition().x - m_background.getSize().x / 2, building.sprite.getPosition().y - m_background.getSize().y - 10);
-        m_titleText.setPosition(m_background.getPosition() + sf::Vector2f(10, 5));
-        m_levelText.setPosition(m_background.getPosition() + sf::Vector2f(10, 30));
-        m_infoText.setPosition(m_background.getPosition() + sf::Vector2f(10, 50));
-        m_upgradeButton.setPosition(m_background.getPosition() + sf::Vector2f(10, 85));
-
-        sf::FloatRect textRect = m_upgradeButtonText.getLocalBounds();
-        m_upgradeButtonText.setOrigin(textRect.left + textRect.width / 2.0f, textRect.top + textRect.height / 2.0f);
-        m_upgradeButtonText.setPosition(m_upgradeButton.getPosition().x + m_upgradeButton.getSize().x / 2.0f, m_upgradeButton.getPosition().y + m_upgradeButton.getSize().y / 2.0f);
-    }
-
-    void hide() {
-        m_visible = false;
-        m_upgradeClicked = false;
-    }
-
-    bool isVisible() const { return m_visible; }
-
-    void handleEvent(const sf::Event& ev, sf::RenderWindow& window) {
-        if (!m_visible) return;
-        m_upgradeClicked = false;
-
-        if (ev.type == sf::Event::MouseButtonPressed && ev.mouseButton.button == sf::Mouse::Left) {
-            sf::FloatRect mouseRect(static_cast<float>(ev.mouseButton.x), static_cast<float>(ev.mouseButton.y), 1, 1);
-            if (m_upgradeButton.getGlobalBounds().contains(window.mapPixelToCoords(sf::Mouse::getPosition(window)))) {
-                m_upgradeClicked = true;
-            }
-        }
-    }
-
-    void draw(sf::RenderWindow& window) {
-        if (!m_visible) return;
-        window.draw(m_background);
-        window.draw(m_titleText);
-        window.draw(m_levelText);
-        window.draw(m_infoText);
-        window.draw(m_upgradeButton);
-        window.draw(m_upgradeButtonText);
-    }
-
-    bool isUpgradeClicked() const { return m_upgradeClicked; }
-
-private:
-    sf::RectangleShape m_background;
-    sf::Text m_titleText, m_levelText, m_infoText, m_upgradeButtonText;
-    sf::RectangleShape m_upgradeButton;
-    bool m_visible;
-    bool m_upgradeClicked;
-};
-// KONIEC POPRAWKI
-
+#include "AudioManager.h"
+#include "WeatherManager.h"
+#include "UIManager.h"
+#include "BuildingTooltip.h" // Zastąpiono definicję klasy tym includem
 
 class Game {
 public:
+    // --- Główne zasoby gry ---
     int currentMoney;
     int currentEnergy;
     int maxEnergy;
     float environmentHealth;
     float totalGameTimeSeconds;
-
-    std::vector<PlacedObject> placedObjects;
-    std::string currentSaveName;
     float musicVolume;
     float sfxVolume;
+    std::string currentSaveName;
 
-    Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures);
+    // --- Obiekty w grze ---
+    std::vector<PlacedObject> placedObjects;
+
+    Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures, AudioManager& audioManager);
     void reset();
-    void handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState& currentState, sf::Sound& clickSound);
-    void update(float dt);
-    void draw(sf::RenderWindow& window);
-    void drawForPause(sf::RenderWindow& window);
-    void updateEnergyMenu();
-    void drawEnergyMenu(sf::RenderWindow& window);
-    void drawOptionsMenu(sf::RenderWindow& window);
-    void showNotification(const std::string& message);
 
-    Grid& getGrid() { return m_grid; }
+    // --- Główne pętle ---
+    void handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState& currentState);
+    void update(float dt);
+    void draw(sf::RenderWindow& window, GameState currentState);
+
+    // --- Akcje w grze ---
     void placeBuilding(int typeId, int price, sf::Vector2f position, bool fromPlayerAction = true);
 
-    float getWeatherMultiplierSolar() const { return m_weatherEffectMultiplierSolar; }
-    float getWeatherMultiplierWind() const { return m_weatherEffectMultiplierWind; }
+    // --- Metody do obsługi naprawy ---
+    void setRepairTarget(PlacedObject* target);
+    PlacedObject* getRepairTarget() const;
+    void confirmRepair();
+
+    // --- Gettery dla innych klas ---
+    Grid& getGrid();
+    HUD& getHUD();
+    AudioManager& getAudioManager();
+    WeatherManager& getWeatherManager();
 
 private:
     void upgradeBuilding(PlacedObject& buildingToUpgrade);
-    void changeWeather();
-    void drawWeatherUI(sf::RenderWindow& window);
     void drawDamagedIcons(sf::RenderWindow& window);
 
+    // --- Główne komponenty i menedżery ---
     sf::Font& m_font;
     std::vector<sf::Texture>& m_buildingTextures;
+    AudioManager& m_audioManager;
+    WeatherManager m_weatherManager;
+    UIManager m_uiManager;
 
+    // --- Komponenty specyficzne dla rozgrywki ---
     GameBackground m_gameBg;
     BuildMenu m_buildMenu;
     HUD m_hud;
     Grid m_grid;
     BuildingTooltip m_tooltip;
+
+    // --- Stan rozgrywki ---
     PlacedObject* m_hoveredBuilding = nullptr;
-
-    WeatherType m_currentWeather;
-    float m_weatherTimer;
-    float m_weatherEffectMultiplierSolar;
-    float m_weatherEffectMultiplierWind;
-    std::deque<WeatherType> m_forecast;
-    static constexpr int FORECAST_LENGTH = 5;
-
-    std::mt19937 m_rng;
-    std::uniform_int_distribution<int> m_weatherTimeDist;
-    std::uniform_real_distribution<float> m_damageDist;
-
-    bool m_weatherBoardExpanded;
-    sf::RectangleShape m_weatherBoardBG;
-    sf::CircleShape m_weatherIconPlaceholder;
-    sf::Text m_weatherStatusText;
-    sf::RectangleShape m_weatherPanel;
-    sf::Text m_weatherPanelTitle, m_weatherPanelCurrentLabel, m_weatherPanelCurrentDesc, m_weatherPanelForecastLabel;
-
-    sf::Texture m_grassTexture;
-    sf::RectangleShape m_grassArea;
-    sf::RectangleShape m_buildModeOverlay;
-    sf::Texture m_repairIconTexture;
-    sf::Sprite m_repairIconSprite;
     bool m_hammerPressed = false;
     bool m_isBuildMode = false;
     bool m_demolishModeActive = false;
+    PlacedObject* m_repairTarget = nullptr;
 
+    // --- Hotspoty ikon na głównym UI ---
     sf::FloatRect m_hammerHotspot{14.f, 18.f, 90.f, 90.f};
     sf::FloatRect m_demolishHotspot{114.f, 18.f, 90.f, 90.f};
     sf::FloatRect m_optionsIconHotspot{1000.f, 18.f, 90.f, 90.f};
     sf::FloatRect m_pauseIconHotspot{1095.f, 18.f, 90.f, 90.f};
     sf::FloatRect m_playableArea{0.f, 121.f, 1200.f, 600.f};
 
+    // --- Elementy trybu wyburzania ---
     sf::Texture m_bulldozerTexture;
     sf::Sprite m_bulldozerSprite;
     sf::Text m_demolishCancelText;
 
-    sf::RectangleShape m_energyPanel;
-    sf::Text m_energyMenuTitle, m_energyInfoText, m_energyValueText;
-    sf::RectangleShape m_sellButton, m_closeButton;
-    sf::Text m_sellButtonText, m_closeButtonText;
-
-    sf::RectangleShape m_optionsPanel;
-    sf::Text m_optionsMenuTitle, m_musicLabel, m_sfxLabel;
-    std::unique_ptr<Slider> m_musicSlider;
-    std::unique_ptr<Slider> m_sfxSlider;
-    sf::RectangleShape m_applyButton, m_cancelButton;
-    sf::Text m_applyButtonText, m_cancelButtonText;
-
-    // --- System Dźwięku (zintegrowany) ---
-    sf::SoundBuffer m_solarPanelBuffer, m_windTurbineBuffer, m_energyStorageBuffer, m_upgradeBuffer;
-    sf::Sound m_solarPanelSound, m_windTurbineSound, m_energyStorageSound, m_upgradeSound;
-    sf::SoundBuffer m_buildingPlaceBuffer, m_buildingSellBuffer;
-    sf::Sound m_buildingPlaceSound, m_buildingSellSound;
-    sf::SoundBuffer m_cashRegisterBuffer;
-    sf::Sound m_cashRegisterSound;
-    sf::SoundBuffer m_repairBuffer;
-    sf::Sound m_repairSound;
-
-    // --- System Powiadomień ---
-    sf::Text m_notificationText;
-    sf::Clock m_notificationClock;
-    bool m_showNotification = false;
+    // --- Elementy tła ---
+    sf::Texture m_grassTexture;
+    sf::RectangleShape m_grassArea;
+    sf::RectangleShape m_buildModeOverlay;
+    sf::Texture m_repairIconTexture;
+    sf::Sprite m_repairIconSprite;
 };
 #endif // GAME_H

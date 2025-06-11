@@ -1,5 +1,4 @@
 #include <SFML/Graphics.hpp>
-#include <SFML/Audio.hpp>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -11,6 +10,7 @@
 #include "SaveManager.h"
 #include "Game.h"
 #include "Constants.h"
+#include "AudioManager.h"
 
 int main() {
     const unsigned WIN_W = 1200, WIN_H = 800;
@@ -22,24 +22,10 @@ int main() {
         std::cerr << "Nie można wczytać czcionki\n"; return -1;
     }
 
-    sf::Music menuMusic;
-    if (!menuMusic.openFromFile("audio/main_menu_music.ogg")) {
-        std::cerr << "Nie mozna wczytac pliku audio/main_menu_music.ogg\n";
+    AudioManager audioManager;
+    if (!audioManager.loadAssets()) {
+        std::cerr << "Wystapil blad podczas ladowania zasobow audio.\n";
     }
-    menuMusic.setLoop(true);
-
-    sf::Music gameMusic;
-    if (!gameMusic.openFromFile("audio/game_music.ogg")) {
-        std::cerr << "Nie mozna wczytac pliku audio/game_music.ogg\n";
-    }
-    gameMusic.setLoop(true);
-
-    sf::SoundBuffer buttonClickBuffer;
-    if (!buttonClickBuffer.loadFromFile("audio/button_click.wav")) {
-        std::cerr << "Nie mozna wczytac pliku audio/button_click.wav\n";
-    }
-    sf::Sound buttonClickSound;
-    buttonClickSound.setBuffer(buttonClickBuffer);
 
     std::vector<sf::Texture> buildingTextures(4);
     if (!buildingTextures[GameConstants::ENERGY_STORAGE_ID].loadFromFile("images/eco_storage.png") ||
@@ -65,8 +51,9 @@ int main() {
     Slider musicSlider((WIN_W - OPTIONS_THEME.sliderWidth)/2.f, OPTIONS_THEME.sliderMusicY, OPTIONS_THEME.sliderWidth, OPTIONS_THEME.sliderHeight, OPTIONS_THEME.thumbRadius);
     Slider sfxSlider((WIN_W - OPTIONS_THEME.sliderWidth)/2.f, OPTIONS_THEME.sliderSfxY, OPTIONS_THEME.sliderWidth, OPTIONS_THEME.sliderHeight, OPTIONS_THEME.thumbRadius);
 
-    Game game(gameFont, buildingTextures);
+    Game game(gameFont, buildingTextures, audioManager);
 
+    // Elementy UI pauzy (prostsze do zostawienia tutaj)
     sf::RectangleShape pauseOverlay({(float)WIN_W, (float)WIN_H}); pauseOverlay.setFillColor({0, 0, 0, 150});
     sf::Text pauseTitle("Pauza", gameFont, 60); pauseTitle.setFillColor(sf::Color::White); pauseTitle.setPosition((WIN_W - pauseTitle.getLocalBounds().width)/2.f, 200.f);
     sf::Text pauseResume("Wznow gre (P)", gameFont, 32); pauseResume.setFillColor(sf::Color::White); pauseResume.setPosition((WIN_W - pauseResume.getLocalBounds().width)/2.f, 350.f);
@@ -75,10 +62,13 @@ int main() {
     sf::Clock savedTextClock;
     bool showSavedText = false;
 
+    // Elementy UI wpisywania nazwy zapisu
     std::string saveName;
     sf::Text inputPrompt("Nazwa zapisu:", gameFont, 34); inputPrompt.setFillColor({101, 67, 33}); inputPrompt.setPosition((WIN_W - inputPrompt.getLocalBounds().width) / 2.f, 186.f);
     sf::Text inputText("", gameFont, 40); inputText.setFillColor({101, 67, 33});
     sf::Clock cursorClock;
+
+    // Elementy UI menu wczytywania
     std::vector<std::string> saves;
     size_t selectedIndex = 0;
     sf::FloatRect deleteButtonHotspot;
@@ -94,60 +84,36 @@ int main() {
             pauseSave.setFillColor(sf::Color::White);
         }
 
-        bool shouldMenuMusicBePlaying = false;
-        bool shouldGameMusicBePlaying = false;
-
-        switch (state) {
-        case GameState::MainMenu:
-        case GameState::OptionsMenu:
-        case GameState::EnterSaveName:
-        case GameState::LoadMenu:
-            shouldMenuMusicBePlaying = true;
-            break;
-
-        case GameState::Playing:
-        case GameState::PauseMenu:
-        case GameState::EnergyMenu:
-        case GameState::InGameOptionsMenu:
-            shouldGameMusicBePlaying = true;
-            break;
+        bool inMenu = (state == GameState::MainMenu || state == GameState::OptionsMenu || state == GameState::EnterSaveName || state == GameState::LoadMenu);
+        if (inMenu) {
+            audioManager.playMenuMusic();
+        } else {
+            audioManager.playGameMusic();
         }
 
-        if (shouldMenuMusicBePlaying && menuMusic.getStatus() != sf::Music::Playing) {
-            menuMusic.play();
-        } else if (!shouldMenuMusicBePlaying && menuMusic.getStatus() == sf::Music::Playing) {
-            menuMusic.stop();
-        }
-
-        if (shouldGameMusicBePlaying && gameMusic.getStatus() != sf::Music::Playing) {
-            gameMusic.play();
-        } else if (!shouldGameMusicBePlaying && gameMusic.getStatus() == sf::Music::Playing) {
-            gameMusic.stop();
-        }
-
-        menuMusic.setVolume(game.musicVolume * 100.f);
-        gameMusic.setVolume(game.musicVolume * 100.f);
-        buttonClickSound.setVolume(game.sfxVolume * 100.f);
+        audioManager.setMusicVolume(game.musicVolume * 100.f);
+        audioManager.setSfxVolume(game.sfxVolume * 100.f);
 
         sf::Event e;
         while (window.pollEvent(e)) {
             if (e.type == sf::Event::Closed) window.close();
 
+            // Przekazanie eventu do gry tylko jeśli jest w stanie aktywnym
+            if (state == GameState::Playing || state == GameState::EnergyMenu || state == GameState::InGameOptionsMenu) {
+                game.handleEvent(e, window, state);
+            }
+
+            // Obsługa eventów dla menu globalnych (poza klasą Game)
             switch (state) {
-            case GameState::Playing:
-            case GameState::EnergyMenu:
-            case GameState::InGameOptionsMenu:
-                game.handleEvent(e, window, state, buttonClickSound);
-                break;
             case GameState::PauseMenu:
                 if (e.type == sf::Event::MouseButtonPressed) {
                     sf::Vector2f pos = window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y});
                     if (pauseResume.getGlobalBounds().contains(pos)) {
-                        buttonClickSound.play();
+                        audioManager.play(SoundEffect::ButtonClick);
                         state = GameState::Playing;
                         deltaClock.restart();
                     } else if (pauseSave.getGlobalBounds().contains(pos) && !showSavedText) {
-                        buttonClickSound.play();
+                        audioManager.play(SoundEffect::ButtonClick);
                         if (!game.currentSaveName.empty()) {
                             if(SaveManager::saveGame(game.currentSaveName, game)) {
                                 pauseSave.setString("Zapisano!");
@@ -164,7 +130,7 @@ int main() {
                             showSavedText = true;
                         }
                     } else if (pauseExit.getGlobalBounds().contains(pos)) {
-                        buttonClickSound.play();
+                        audioManager.play(SoundEffect::ButtonClick);
                         if (!game.currentSaveName.empty()) SaveManager::saveGame(game.currentSaveName, game);
                         state = GameState::MainMenu;
                     }
@@ -182,29 +148,25 @@ int main() {
                     sf::FloatRect hotLoad(hotNew.left, hotNew.top + btn.size.height + 20.f, hotNew.width, hotNew.height);
                     sf::FloatRect hotOpt(hotNew.left, hotLoad.top + btn.size.height + 20.f, hotNew.width, hotNew.height);
                     sf::FloatRect hotExit(hotNew.left, hotOpt.top + btn.size.height + 20.f, hotNew.width, hotNew.height);
-
                     if (hotNew.contains(pos)) {
-                        buttonClickSound.play();
+                        audioManager.play(SoundEffect::ButtonClick);
                         game.reset();
                         saveName.clear();
                         inputText.setString("");
                         cursorClock.restart();
                         state = GameState::EnterSaveName;
-                    }
-                    else if (hotLoad.contains(pos)) {
-                        buttonClickSound.play();
+                    } else if (hotLoad.contains(pos)) {
+                        audioManager.play(SoundEffect::ButtonClick);
                         saves = SaveManager::listSaves();
                         selectedIndex = 0;
                         state = GameState::LoadMenu;
-                    }
-                    else if (hotOpt.contains(pos)) {
-                        buttonClickSound.play();
+                    } else if (hotOpt.contains(pos)) {
+                        audioManager.play(SoundEffect::ButtonClick);
                         musicSlider.setValue(game.musicVolume);
                         sfxSlider.setValue(game.sfxVolume);
                         state = GameState::OptionsMenu;
-                    }
-                    else if (hotExit.contains(pos)) {
-                        buttonClickSound.play();
+                    } else if (hotExit.contains(pos)) {
+                        audioManager.play(SoundEffect::ButtonClick);
                         window.close();
                     }
                 }
@@ -214,7 +176,7 @@ int main() {
                     sf::Vector2f pos = window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y});
                     if (deleteButtonHotspot.contains(pos)) {
                         if (!saves.empty()) {
-                            buttonClickSound.play();
+                            audioManager.play(SoundEffect::ButtonClick);
                             SaveManager::deleteGame(saves[selectedIndex]);
                             saves = SaveManager::listSaves();
                             if (selectedIndex >= saves.size() && !saves.empty()) {
@@ -233,7 +195,7 @@ int main() {
                                     } else { std::cerr << "Wczytywanie nie powiodlo sie.\n"; }
                                 } else {
                                     selectedIndex = i;
-                                    buttonClickSound.play();
+                                    audioManager.play(SoundEffect::ButtonClick);
                                 }
                                 break;
                             }
@@ -254,70 +216,68 @@ int main() {
                 break;
             case GameState::EnterSaveName:
                 if (e.type == sf::Event::TextEntered) {
-                    if (e.text.unicode == '\r' || e.text.unicode == '\n') {
-                        if (!saveName.empty()) {
-                            game.currentSaveName = saveName;
-                            SaveManager::saveGame(saveName, game);
-                        }
+                    if ((e.text.unicode == '\r' || e.text.unicode == '\n') && !saveName.empty()) {
+                        game.currentSaveName = saveName;
+                        SaveManager::saveGame(saveName, game);
                         state = GameState::Playing;
                         deltaClock.restart();
-                    } else if (e.text.unicode == 8 && !saveName.empty()) saveName.pop_back();
-                    else if (e.text.unicode >= 32 && e.text.unicode < 128) saveName.push_back(static_cast<char>(e.text.unicode));
-                    inputText.setString(saveName); inputText.setPosition((WIN_W - inputText.getLocalBounds().width) / 2.f, 290.f);
+                    } else if (e.text.unicode == 8 && !saveName.empty()) {
+                        saveName.pop_back();
+                    } else if (e.text.unicode >= 32 && e.text.unicode < 128) {
+                        saveName.push_back(static_cast<char>(e.text.unicode));
+                    }
+                    inputText.setString(saveName);
+                    inputText.setPosition((WIN_W - inputText.getLocalBounds().width) / 2.f, 290.f);
                 }
                 if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) state = GameState::MainMenu;
                 break;
             case GameState::OptionsMenu:
                 musicSlider.handleEvent(e, window);
                 sfxSlider.handleEvent(e, window);
-
                 if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
                     sf::Vector2f pos = window.mapPixelToCoords({e.mouseButton.x, e.mouseButton.y});
-                    const float buttonWidth = OPTIONS_THEME.saveButton.size.width;
-                    const float buttonHeight = OPTIONS_THEME.saveButton.size.height;
-                    const float buttonY = OPTIONS_THEME.saveButtonY;
-                    const float gap = 40.f;
-                    const float saveX = (WIN_W / 2.f) - buttonWidth - (gap / 2.f);
-                    const float cancelX = (WIN_W / 2.f) + (gap / 2.f);
+                    const float buttonWidth = OPTIONS_THEME.saveButton.size.width, buttonHeight = OPTIONS_THEME.saveButton.size.height;
+                    const float buttonY = OPTIONS_THEME.saveButtonY, gap = 40.f;
+                    const float saveX = (WIN_W / 2.f) - buttonWidth - (gap / 2.f), cancelX = (WIN_W / 2.f) + (gap / 2.f);
                     sf::FloatRect saveHotspot(saveX, buttonY, buttonWidth, buttonHeight);
                     sf::FloatRect cancelHotspot(cancelX, buttonY, buttonWidth, buttonHeight);
-
                     if (saveHotspot.contains(pos)) {
-                        buttonClickSound.play();
+                        audioManager.play(SoundEffect::ButtonClick);
                         game.musicVolume = musicSlider.getValue();
                         game.sfxVolume = sfxSlider.getValue();
                         state = GameState::MainMenu;
                     } else if (cancelHotspot.contains(pos)) {
-                        buttonClickSound.play();
+                        audioManager.play(SoundEffect::ButtonClick);
                         state = GameState::MainMenu;
                     }
                 }
-                if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) {
-                    state = GameState::MainMenu;
-                }
+                if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) state = GameState::MainMenu;
+                break;
+            default:
                 break;
             }
         }
 
         if (state == GameState::Playing) {
             game.update(deltaClock.restart().asSeconds());
-        } else if (state == GameState::EnergyMenu) {
-            game.updateEnergyMenu();
         }
 
         window.clear();
+
         switch (state) {
-        case GameState::Playing: game.draw(window); break;
+        case GameState::Playing:
+        case GameState::EnergyMenu:
+        case GameState::InGameOptionsMenu:
+            game.draw(window, state);
+            break;
         case GameState::PauseMenu:
-            game.drawForPause(window);
+            game.draw(window, state); // Rysuj grę w tle
             window.draw(pauseOverlay);
             window.draw(pauseTitle);
             window.draw(pauseResume);
             window.draw(pauseSave);
             window.draw(pauseExit);
             break;
-        case GameState::EnergyMenu: game.drawEnergyMenu(window); break;
-        case GameState::InGameOptionsMenu: game.drawOptionsMenu(window); break;
         case GameState::MainMenu: window.draw(menuSprite); break;
         case GameState::LoadMenu:
             window.draw(loadDialogSprite);
@@ -326,14 +286,12 @@ int main() {
                 float listAreaWidth = 482.f, listStartX = (WIN_W - listAreaWidth) / 2.f, listStartY = 270.f, lh = 40.f;
                 sf::Text deleteButton("X", gameFont, 24);
                 deleteButton.setFillColor(sf::Color::Red);
-
                 for (size_t i = 0; i < saves.size(); ++i) {
                     if (i == selectedIndex) {
                         sf::RectangleShape hl({listAreaWidth, lh - 4.f});
                         hl.setFillColor({170, 200, 255, 180});
                         hl.setPosition(listStartX, listStartY + i * lh - 2.f);
                         window.draw(hl);
-
                         float xPos = listStartX + listAreaWidth - deleteButton.getLocalBounds().width - 25.f;
                         float yPos = listStartY + i * lh + (lh - deleteButton.getCharacterSize()) / 2.f - 8.f;
                         deleteButton.setPosition(xPos, yPos);

@@ -37,6 +37,10 @@ public:
     std::optional<DragState>& getDragState();
     void cancelDragging();
 
+    // ##### NOWA FUNKCJA #####
+    sf::FloatRect getBackgroundBounds() const;
+    // ########################
+
 private:
     std::vector<BuildItem> items;
     sf::RectangleShape     background;
