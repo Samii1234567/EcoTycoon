@@ -6,6 +6,7 @@
 #include <sstream>
 #include <iomanip>
 #include <iostream>
+#include <algorithm> // Dla std::max
 
 // ===================================================================================
 //
@@ -102,10 +103,10 @@ UIManager::UIManager(sf::Font& font, Game& game)
     m_contractListCloseText.setPosition(m_contractListCloseButton.getPosition().x + m_contractListCloseButton.getSize().x / 2.f, m_contractListCloseButton.getPosition().y + m_contractListCloseButton.getSize().y / 2.f);
     if (!m_scrollTexture.loadFromFile("images/contract_paper.png")) { std::cerr << "Nie mozna wczytac contract_paper.png\n"; }
     m_scrollSprite.setTexture(m_scrollTexture); m_scrollSprite.setPosition((WIN_W - m_scrollTexture.getSize().x) / 2.f, (WIN_H - m_scrollTexture.getSize().y) / 2.f);
-    sf::Vector2f scrollPos = m_scrollSprite.getPosition(); float scrollWidth = m_scrollSprite.getGlobalBounds().width; float textLeftMargin = scrollPos.x + 120.f;
-    m_contractCityText.setFont(m_font); m_contractCityText.setCharacterSize(24); m_contractCityText.setFillColor(textColor); m_contractCityText.setPosition(textLeftMargin, scrollPos.y + 150.f);
-    m_contractDemandText.setFont(m_font); m_contractDemandText.setCharacterSize(24); m_contractDemandText.setFillColor(textColor); m_contractDemandText.setPosition(textLeftMargin, scrollPos.y + 200.f);
-    m_contractPaymentText.setFont(m_font); m_contractPaymentText.setCharacterSize(24); m_contractPaymentText.setFillColor(textColor); m_contractPaymentText.setPosition(textLeftMargin, scrollPos.y + 250.f);
+    sf::Vector2f scrollPos = m_scrollSprite.getPosition(); float scrollWidth = m_scrollSprite.getGlobalBounds().width;
+    m_contractCityText.setFont(m_font); m_contractCityText.setCharacterSize(24); m_contractCityText.setFillColor(textColor);
+    m_contractDemandText.setFont(m_font); m_contractDemandText.setCharacterSize(24); m_contractDemandText.setFillColor(textColor);
+    m_contractPaymentText.setFont(m_font); m_contractPaymentText.setCharacterSize(24); m_contractPaymentText.setFillColor(textColor);
     m_acceptButton.setSize({180, 50}); m_acceptButton.setFillColor({90, 160, 90, 200}); m_acceptButton.setPosition(scrollPos.x + 80.f, scrollPos.y + 350.f);
     m_acceptText.setFont(m_font); m_acceptText.setString("Akceptuj"); m_acceptText.setCharacterSize(24); m_acceptText.setFillColor(sf::Color::White);
     rct = m_acceptText.getLocalBounds(); m_acceptText.setOrigin(rct.left + rct.width/2.f, rct.top + rct.height/2.f);
@@ -173,22 +174,56 @@ UIManager::UIManager(sf::Font& font, Game& game)
     m_notificationText.setPosition(WIN_W / 2.f, 125.f);
 
     // --- Inicjalizacja panelu informacyjnego o pogodzie ---
-    // Ta sekcja tworzy duży, przewijany panel z opisami wszystkich zjawisk pogodowych.
-    m_weatherInfoPanel.setSize({800.f, 600.f}); m_weatherInfoPanel.setFillColor({20, 20, 40, 245}); m_weatherInfoPanel.setOutlineColor(sf::Color::White); m_weatherInfoPanel.setOutlineThickness(2.f);
+    m_weatherInfoPanel.setSize({800.f, 600.f});
+    m_weatherInfoPanel.setFillColor({20, 20, 40, 245});
+    m_weatherInfoPanel.setOutlineColor(sf::Color::White);
+    m_weatherInfoPanel.setOutlineThickness(2.f);
     m_weatherInfoPanel.setPosition((WIN_W - 800.f) / 2.f, (WIN_H - 600.f) / 2.f);
-    m_weatherInfoTitle.setFont(m_font); m_weatherInfoTitle.setString("Informacje o pogodzie"); m_weatherInfoTitle.setCharacterSize(36); m_weatherInfoTitle.setFillColor(sf::Color::White);
+
+    m_weatherInfoTitle.setFont(m_font);
+    m_weatherInfoTitle.setString("Informacje o pogodzie");
+    m_weatherInfoTitle.setCharacterSize(36);
+    m_weatherInfoTitle.setFillColor(sf::Color::White);
     m_weatherInfoTitle.setPosition(m_weatherInfoPanel.getPosition().x + (m_weatherInfoPanel.getSize().x - m_weatherInfoTitle.getGlobalBounds().width) / 2.f, m_weatherInfoPanel.getPosition().y + 15.f);
-    float contentStartY = m_weatherInfoPanel.getPosition().y + 65.f; float currentY = contentStartY; float paddingX = m_weatherInfoPanel.getPosition().x + 25.f;
+
+    // Konfiguracja układu dwukolumnowego
+    float contentStartY = m_weatherInfoPanel.getPosition().y - 80.f;
+    float panelX = m_weatherInfoPanel.getPosition().x;
+    float panelWidth = m_weatherInfoPanel.getSize().x;
+    float col1X = panelX - 150.f;
+    float col2X = panelX + panelWidth / 2.f - 200.f;
+    float yCol1 = contentStartY;
+    float yCol2 = contentStartY;
+
     for (int i = 0; i <= static_cast<int>(WeatherType::Smog); ++i) {
         WeatherType type = static_cast<WeatherType>(i);
         WeatherInfoEntry entry;
-        entry.name.setFont(m_font); entry.name.setString(getWeatherName(type)); entry.name.setCharacterSize(22); entry.name.setStyle(sf::Text::Bold); entry.name.setFillColor(sf::Color::White);
-        entry.name.setPosition(paddingX, currentY); currentY += 30;
-        entry.description.setFont(m_font); entry.description.setString(getWeatherDescription(type)); entry.description.setCharacterSize(18); entry.description.setFillColor(sf::Color(200, 200, 200));
-        entry.description.setPosition(paddingX, currentY); currentY += entry.description.getGlobalBounds().height + 30;
+        entry.name.setFont(m_font);
+        entry.name.setString(getWeatherName(type));
+        entry.name.setCharacterSize(22);
+        entry.name.setStyle(sf::Text::Bold);
+        entry.name.setFillColor(sf::Color::White);
+
+        entry.description.setFont(m_font);
+        entry.description.setString(getWeatherDescription(type));
+        entry.description.setCharacterSize(18);
+        entry.description.setFillColor(sf::Color(200, 200, 200));
+
+        if (i < 4) { // Pierwsza kolumna
+            entry.name.setPosition(col1X, yCol1);
+            yCol1 += 30;
+            entry.description.setPosition(col1X, yCol1);
+            yCol1 += entry.description.getGlobalBounds().height + 35;
+        } else { // Druga kolumna
+            entry.name.setPosition(col2X, yCol2);
+            yCol2 += 30;
+            entry.description.setPosition(col2X, yCol2);
+            yCol2 += entry.description.getGlobalBounds().height + 35;
+        }
         m_weatherInfoEntries.push_back(entry);
     }
-    m_weatherInfoContentHeight = (currentY - contentStartY);
+
+    m_weatherInfoContentHeight = std::max(yCol1, yCol2) - contentStartY;
     m_weatherInfoCloseButton.setSize({150.f, 40.f}); m_weatherInfoCloseButton.setFillColor({180, 80, 80});
     m_weatherInfoCloseButton.setPosition(m_weatherInfoPanel.getPosition().x + (m_weatherInfoPanel.getSize().x - 150.f) / 2.f, m_weatherInfoPanel.getPosition().y + m_weatherInfoPanel.getSize().y - 60.f);
     m_weatherInfoCloseButtonText.setFont(m_font); m_weatherInfoCloseButtonText.setString("Zamknij"); m_weatherInfoCloseButtonText.setCharacterSize(20);
@@ -467,18 +502,35 @@ void UIManager::drawContractList(sf::RenderWindow& window) {
     auto pending = m_game.getContractManager().getPendingContracts();
     if (pending.empty()) {
         m_noContractsText.setString("Brak nowych ofert");
+
+        // POPRAWKA: Ponowne centrowanie tekstu po zmianie jego treści
+        sf::FloatRect textBounds = m_noContractsText.getLocalBounds();
+        m_noContractsText.setOrigin(textBounds.left + textBounds.width / 2.f, textBounds.top + textBounds.height / 2.f);
+        m_noContractsText.setPosition(m_contractListBackground.getPosition().x + m_contractListBackground.getSize().x / 2.f, m_contractListBackground.getPosition().y + m_contractListBackground.getSize().y / 2.f);
+
         window.draw(m_noContractsText);
     } else {
-        float startX = m_contractListBackground.getPosition().x + 20.f, itemY = m_contractListBackground.getPosition().y + 80.f;
+        const float listTopY = m_contractListBackground.getPosition().y + 80.f;
+        const float rowHeight = 45.f;
+        const float centerX = m_contractListBackground.getPosition().x + m_contractListBackground.getSize().x / 2.f;
         sf::Text itemText("", m_font, 22);
-        for(const auto& contract : pending) {
+
+        for(size_t i = 0; i < pending.size(); ++i) {
+            const auto& contract = pending[i];
             bool canAccept = m_game.getNetEnergyPerSecond() >= contract.energyPerSecond;
             itemText.setFillColor(canAccept ? sf::Color::White : sf::Color(150, 150, 150));
+
             std::stringstream ss;
             ss << "Oferta od: " << contract.cityName << " (Wymaga: " << contract.energyPerSecond << " E/s, Zysk: " << contract.paymentPerSecond << "$/s)";
-            itemText.setString(ss.str()); itemText.setPosition(startX, itemY);
+            itemText.setString(ss.str());
+
+            sf::FloatRect textBounds = itemText.getLocalBounds();
+            itemText.setOrigin(textBounds.left + textBounds.width / 2.f, textBounds.top + textBounds.height / 2.f);
+
+            float rowCenterY = listTopY + (i * rowHeight) + (rowHeight / 2.f);
+            itemText.setPosition(centerX, rowCenterY);
+
             window.draw(itemText);
-            itemY += 45.f;
         }
     }
     window.draw(m_contractListCloseButton); window.draw(m_contractListCloseText);
@@ -491,16 +543,33 @@ void UIManager::drawActiveContractList(sf::RenderWindow& window) {
     auto active = m_game.getContractManager().getActiveContracts();
     if (active.empty()) {
         m_noContractsText.setString("Brak podpisanych kontraktow");
+
+        // POPRAWKA: Ponowne centrowanie tekstu po zmianie jego treści
+        sf::FloatRect textBounds = m_noContractsText.getLocalBounds();
+        m_noContractsText.setOrigin(textBounds.left + textBounds.width / 2.f, textBounds.top + textBounds.height / 2.f);
+        m_noContractsText.setPosition(m_contractListBackground.getPosition().x + m_contractListBackground.getSize().x / 2.f, m_contractListBackground.getPosition().y + m_contractListBackground.getSize().y / 2.f);
+
         window.draw(m_noContractsText);
     } else {
-        float startX = m_contractListBackground.getPosition().x + 20.f, itemY = m_contractListBackground.getPosition().y + 80.f;
-        sf::Text itemText("", m_font, 22); itemText.setFillColor(sf::Color(180, 255, 180));
-        for(const auto& contract : active) {
+        const float listTopY = m_contractListBackground.getPosition().y + 80.f;
+        const float rowHeight = 45.f;
+        const float centerX = m_contractListBackground.getPosition().x + m_contractListBackground.getSize().x / 2.f;
+        sf::Text itemText("", m_font, 22);
+        itemText.setFillColor(sf::Color(180, 255, 180));
+
+        for(size_t i = 0; i < active.size(); ++i) {
+            const auto& contract = active[i];
             std::stringstream ss;
             ss << "Dostawa dla: " << contract.cityName << " (" << contract.energyPerSecond << " E/s za " << contract.paymentPerSecond << "$/s)";
-            itemText.setString(ss.str()); itemText.setPosition(startX, itemY);
+
+            itemText.setString(ss.str());
+            sf::FloatRect textBounds = itemText.getLocalBounds();
+            itemText.setOrigin(textBounds.left + textBounds.width / 2.f, textBounds.top + textBounds.height / 2.f);
+
+            float rowCenterY = listTopY + (i * rowHeight) + (rowHeight / 2.f);
+            itemText.setPosition(centerX, rowCenterY);
+
             window.draw(itemText);
-            itemY += 45.f;
         }
     }
     window.draw(m_contractListCloseButton); window.draw(m_contractListCloseText);
@@ -509,21 +578,42 @@ void UIManager::drawActiveContractList(sf::RenderWindow& window) {
 void UIManager::drawContractDetail(sf::RenderWindow& window) {
     const Contract* viewed = m_game.getContractManager().getContractById(m_viewedContractId);
     if (!viewed) return;
+
+    float centerX = m_scrollSprite.getPosition().x + m_scrollSprite.getGlobalBounds().width / 2.f;
+    sf::FloatRect bounds;
+
     if (viewed->status == ContractStatus::Pending) {
         bool canAccept = m_game.getNetEnergyPerSecond() >= viewed->energyPerSecond;
         if (canAccept) { m_acceptButton.setFillColor({90, 160, 90, 200}); m_acceptText.setString("Akceptuj"); }
         else { m_acceptButton.setFillColor({100, 100, 100, 200}); m_acceptText.setString("Brak mocy"); }
         m_rejectButton.setFillColor({200, 90, 90, 200});
+
         m_contractCityText.setString("Oferta od: " + viewed->cityName);
         m_contractDemandText.setString("Zapotrzebowanie: " + std::to_string(viewed->energyPerSecond) + " E/s");
         m_contractPaymentText.setString("Platnosc: " + std::to_string(viewed->paymentPerSecond) + "$/s");
+
         window.draw(m_rejectButton); window.draw(m_rejectText);
     } else if (viewed->status == ContractStatus::Active) {
         m_acceptButton.setFillColor({220, 120, 80, 200}); m_acceptText.setString("Zrezygnuj");
+
         m_contractCityText.setString("Dostawa dla: " + viewed->cityName);
         m_contractDemandText.setString("Zobowiazanie: " + std::to_string(viewed->energyPerSecond) + " E/s");
         m_contractPaymentText.setString("Przychód: " + std::to_string(viewed->paymentPerSecond) + "$/s");
     }
+
+    // Centrowanie tekstu na zwoju
+    bounds = m_contractCityText.getLocalBounds();
+    m_contractCityText.setOrigin(bounds.left + bounds.width / 2.f, bounds.top + bounds.height / 2.f);
+    m_contractCityText.setPosition(centerX, m_scrollSprite.getPosition().y + 150.f);
+
+    bounds = m_contractDemandText.getLocalBounds();
+    m_contractDemandText.setOrigin(bounds.left + bounds.width / 2.f, bounds.top + bounds.height / 2.f);
+    m_contractDemandText.setPosition(centerX, m_scrollSprite.getPosition().y + 200.f);
+
+    bounds = m_contractPaymentText.getLocalBounds();
+    m_contractPaymentText.setOrigin(bounds.left + bounds.width / 2.f, bounds.top + bounds.height / 2.f);
+    m_contractPaymentText.setPosition(centerX, m_scrollSprite.getPosition().y + 250.f);
+
     window.draw(m_scrollSprite); window.draw(m_contractCityText); window.draw(m_contractDemandText);
     window.draw(m_contractPaymentText); window.draw(m_acceptButton); window.draw(m_acceptText);
     window.draw(m_scrollCloseButton);

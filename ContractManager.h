@@ -54,6 +54,25 @@ public:
     // Resetuje licznik nieprzeczytanych kontraktów (np. po otwarciu menu).
     void markAsRead();
 
+    // Resetuje menedżer do stanu początkowego, czyszcząc wszystkie kontrakty.
+    void reset();
+
+    // Wczytuje stan menedżera (listę kontraktów i liczniki) z pliku zapisu.
+    void loadState(const std::vector<Contract>& contracts, int nextId, int unreadCount);
+
+    // Zwraca wszystkie kontrakty (do zapisu stanu gry).
+    const std::vector<Contract>& getContracts() const;
+
+    // Zwraca ID dla następnego kontraktu (do zapisu stanu gry).
+    int getNextContractId() const;
+
+    // Sprawdza, czy istnieje jakikolwiek aktywny kontrakt.
+    bool hasActiveContracts() const;
+
+    // Zrywa wszystkie aktywne kontrakty (np. przy braku energii).
+    void terminateAllActiveContracts();
+
+
 private:
     // --- Metody i pola prywatne ---
 

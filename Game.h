@@ -91,7 +91,11 @@ public:
     HUD& getHUD();
     AudioManager& getAudioManager();
     WeatherManager& getWeatherManager();
+
+    // POPRAWKA: Dodano przeciążoną metodę const, aby umożliwić dostęp z funkcji saveGame
     ContractManager& getContractManager();
+    const ContractManager& getContractManager() const;
+
     float getNetEnergyPerSecond() const;
 
 private:

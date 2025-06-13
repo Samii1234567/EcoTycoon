@@ -3,6 +3,7 @@
 #include <filesystem> // Do operacji na plikach i folderach (C++17)
 #include <fstream>    // Do strumieni plikowych (zapis/odczyt)
 #include <iostream>
+#include <iomanip>    // DODANY NAGŁÓWEK dla std::quoted
 
 // Użycie przestrzeni nazw dla `std::filesystem` dla krótszego zapisu.
 namespace fs = std::filesystem;
@@ -48,6 +49,21 @@ bool SaveManager::saveGame(const std::string& name, const Game& game) {
             << obj.level << " "
             << obj.isDamaged << "\n";
     }
+
+    // --- POCZĄTEK NOWEJ LOGIKI ZAPISU KONTRAKTÓW ---
+    const auto& contracts = game.getContractManager().getContracts();
+    ofs << contracts.size() << "\n";
+    for (const auto& contract : contracts) {
+        ofs << contract.id << " "
+            << static_cast<int>(contract.status) << " "
+            << contract.energyPerSecond << " "
+            << contract.paymentPerSecond << " "
+            << std::quoted(contract.cityName) << "\n"; // Używamy std::quoted dla bezpieczeństwa
+    }
+    ofs << game.getContractManager().getNextContractId() << "\n";
+    ofs << game.getContractManager().getUnreadCount() << "\n";
+    // --- KONIEC NOWEJ LOGIKI ZAPISU KONTRAKTÓW ---
+
     return true; // Zapis udany.
 }
 
@@ -111,6 +127,33 @@ bool SaveManager::loadGame(const std::string& name, Game& game, const std::vecto
             }
         }
     }
+
+    // POCZĄTEK LOGIKI WCZYTYWANIA KONTRAKTÓW
+    size_t numContracts;
+    ifs >> numContracts;
+    if (!ifs) return false;
+
+    std::vector<Contract> loadedContracts;
+    for (size_t i = 0; i < numContracts; ++i) {
+        Contract contract;
+        int status_int;
+        ifs >> contract.id >> status_int >> contract.energyPerSecond >> contract.paymentPerSecond >> std::quoted(contract.cityName);
+        if (!ifs) { return false; }
+
+        contract.status = static_cast<ContractStatus>(status_int);
+        loadedContracts.push_back(contract);
+    }
+
+    int nextId, unreadCount;
+    ifs >> nextId;
+    if (!ifs) return false;
+    ifs >> unreadCount;
+    // if (!ifs) return false; // Może brakować w starych zapisach, można to zignorować.
+    if(ifs.fail()) unreadCount = 0; // Domyślna wartość dla starych zapisów
+
+    game.getContractManager().loadState(loadedContracts, nextId, unreadCount);
+    // --- KONIEC NOWEJ LOGIKI WCZYTYWANIA KONTRAKTÓW ---
+
     // Zapisujemy nazwę wczytanej gry, aby kolejne zapisy mogły ją nadpisać.
     game.currentSaveName = name;
     return true; // Odczyt udany.

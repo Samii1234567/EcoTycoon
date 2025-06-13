@@ -22,7 +22,7 @@ Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures, AudioMana
     : m_font(font),
     m_buildingTextures(buildingTextures),
     m_audioManager(audioManager),
-    m_uiManager(font, *this), // UIManager potrzebuje dostępu do Game, więc przekazujemy `*this`
+    m_uiManager(font, *this),
     m_hud(font)
 {
     // --- Inicjalizacja podstawowych ustawień i komponentów ---
@@ -79,7 +79,6 @@ Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures, AudioMana
     m_demolishCancelText.setPosition(1200 / 2.f, 30.f);
 
     // --- Konfiguracja widoku (kamery) dla obszaru grywalnego ---
-    // To pozwala na oddzielenie rysowania świata gry od rysowania HUD.
     m_gameplayView.setSize(m_playableArea.width, m_playableArea.height);
     m_gameplayView.setCenter(m_playableArea.left + m_playableArea.width / 2.f, m_playableArea.top + m_playableArea.height / 2.f);
     m_gameplayView.setViewport(sf::FloatRect(
@@ -91,10 +90,9 @@ Game::Game(sf::Font& font, std::vector<sf::Texture>& buildingTextures, AudioMana
 
     // --- Finalne inicjalizacje ---
     initializeWeatherEffects();
-    reset(); // Ustawienie początkowych wartości dla nowej gry.
+    reset();
 }
 
-// Implementacja resetowania gry.
 void Game::reset() {
     currentMoney = 1000;
     currentEnergy = 0;
@@ -117,22 +115,18 @@ void Game::reset() {
     m_energyAccumulator = 0.f;
     m_grid.initialize({0.f, 121.f}, GameConstants::GRID_COLS, GameConstants::GRID_ROWS, GameConstants::GRID_CELL_SIZE);
     m_weatherManager.reset();
+    m_contractManager.reset();
 }
 
-// Implementacja obsługi zdarzeń.
 void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState& currentState) {
-    // Panel naprawy ma priorytet.
     if (m_repairTarget) {
         m_uiManager.handleEvent(ev, window, currentState);
         return;
     }
 
-    // Zdarzenia są najpierw przekazywane do UIManagera, który obsługuje panele.
     m_uiManager.handleEvent(ev, window, currentState);
-    // Jeśli UIManager zmienił stan gry (np. otworzył menu), przerywamy dalsze przetwarzanie.
     if (currentState != GameState::Playing) return;
 
-    // Obsługa dymka z informacjami o budynku.
     if (m_tooltip.isVisible() && !m_demolishModeActive) {
         m_tooltip.handleEvent(ev, window);
         if (m_tooltip.isUpgradeClicked() && m_hoveredBuilding) {
@@ -140,7 +134,6 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
         }
     }
 
-    // Obsługa klawiatury.
     if (ev.type == sf::Event::KeyPressed) {
         if (ev.key.code == sf::Keyboard::P) { currentState = GameState::PauseMenu; return; }
         if (ev.key.code == sf::Keyboard::Escape) {
@@ -153,19 +146,16 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
         }
     }
 
-    // Obsługa ruchu myszy.
     if (ev.type == sf::Event::MouseMoved) {
         sf::Vector2f pos = window.mapPixelToCoords({ev.mouseMove.x, ev.mouseMove.y});
         if (auto& drag = m_buildMenu.getDragState(); drag.has_value()) {
-            drag->sprite.setPosition(pos); // Przesuwanie "ducha" budynku.
+            drag->sprite.setPosition(pos);
         }
         else if (!m_demolishModeActive) {
             if (m_buildMenu.isVisible() && m_buildMenu.getBackgroundBounds().contains(pos)) {
-                // Jeśli kursor jest nad menu budowania, ukryj dymek.
                 m_tooltip.hide();
                 m_hoveredBuilding = nullptr;
             } else {
-                // Sprawdzanie, czy kursor jest nad jakimś budynkiem.
                 m_hoveredBuilding = nullptr;
                 for (auto& building : placedObjects) {
                     if (building.sprite.getGlobalBounds().contains(pos)) {
@@ -182,7 +172,6 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
         }
     }
 
-    // Logika dla trybu budowania (gdy przeciągamy budynek).
     if (auto& drag = m_buildMenu.getDragState(); drag.has_value()) {
         m_isBuildMode = true;
         if (ev.type == sf::Event::MouseButtonPressed) {
@@ -196,11 +185,10 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
                 m_buildMenu.cancelDragging(); m_isBuildMode = false; m_hammerPressed = false;
             }
         }
-    } else { // Logika, gdy nie jesteśmy w trybie przeciągania.
+    } else {
         if (ev.type == sf::Event::MouseButtonPressed && ev.mouseButton.button == sf::Mouse::Left) {
             sf::Vector2f pos = window.mapPixelToCoords({ev.mouseButton.x, ev.mouseButton.y});
             bool uiClicked = false;
-            // Sprawdzanie kliknięć w ikony na górnym i dolnym pasku UI.
             if (m_hammerHotspot.contains(pos)) { uiClicked = true; m_audioManager.play(SoundEffect::ButtonClick); m_hammerPressed = !m_hammerPressed; m_buildMenu.setVisible(m_hammerPressed); }
             else if (m_demolishHotspot.contains(pos)) { uiClicked = true; m_audioManager.play(SoundEffect::ButtonClick); m_demolishModeActive = !m_demolishModeActive; if (m_hammerPressed) { m_hammerPressed = false; m_buildMenu.setVisible(false); } }
             else if (m_optionsIconHotspot.contains(pos)) { uiClicked = true; m_audioManager.play(SoundEffect::ButtonClick); m_uiManager.syncSliderValues(); currentState = GameState::InGameOptionsMenu; }
@@ -210,11 +198,10 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
 
             if (uiClicked) return;
 
-            // Logika dla trybu burzenia.
             if (m_demolishModeActive) {
                 for (auto it = placedObjects.begin(); it != placedObjects.end(); ++it) {
                     if (it->sprite.getGlobalBounds().contains(pos)) {
-                        currentMoney += it->price / 2; // Odzysk połowy kosztów.
+                        currentMoney += it->price / 2;
                         if (it->typeId == GameConstants::ENERGY_STORAGE_ID) {
                             maxEnergy -= GameConstants::STORAGE_DATA.value[it->level - 1];
                             if (currentEnergy > maxEnergy) currentEnergy = maxEnergy;
@@ -226,16 +213,38 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
                         return;
                     }
                 }
-            } else { // Logika klikania na budynki (np. w celu naprawy).
+            } else {
+                // --- POPRAWKA: Dodano logikę odtwarzania dźwięków po kliknięciu na budynek ---
                 for (auto& obj : placedObjects) {
-                    if (obj.isDamaged && obj.sprite.getGlobalBounds().contains(pos)) {
-                        setRepairTarget(&obj);
+                    if (obj.sprite.getGlobalBounds().contains(pos)) {
+                        if (obj.isDamaged) {
+                            // Odtwórz dźwięk i otwórz panel naprawy dla uszkodzonych budynków
+                            m_audioManager.play(SoundEffect::ButtonClick);
+                            setRepairTarget(&obj);
+                        } else {
+                            // Odtwórz dźwięk specyficzny dla danego typu budynku
+                            switch (obj.typeId) {
+                            case GameConstants::SOLAR_PANEL_ID:
+                                m_audioManager.play(SoundEffect::SolarPanel);
+                                break;
+                            case GameConstants::WIND_TURBINE_ID:
+                                m_audioManager.play(SoundEffect::WindTurbine);
+                                break;
+                            case GameConstants::ENERGY_STORAGE_ID:
+                                m_audioManager.play(SoundEffect::EnergyStorage);
+                                break;
+                            // Dla Stacji Filtrowania można użyć domyślnego dźwięku
+                            case GameConstants::AIR_FILTER_ID:
+                                m_audioManager.play(SoundEffect::ButtonClick);
+                                break;
+                            }
+                        }
+                        // Po znalezieniu klikniętego budynku, przerywamy dalsze sprawdzanie
                         return;
                     }
                 }
             }
         }
-        // Obsługa zdarzeń w menu budowania (np. gdy brakuje pieniędzy).
         if (m_buildMenu.isVisible()) {
             if (m_buildMenu.handleEvent(ev, window, currentMoney) == BuildMenu::ClickResult::NotEnoughMoney) {
                 m_uiManager.showNotification("Brak wystarczajacych srodkow");
@@ -244,18 +253,16 @@ void Game::handleEvent(const sf::Event& ev, sf::RenderWindow& window, GameState&
     }
 }
 
-// Implementacja głównej pętli aktualizacji logiki gry.
 void Game::update(float dt) {
     totalGameTimeSeconds += dt;
     m_secondAccumulator += dt;
 
     // --- Faza obliczeń ---
-    // W tej fazie sumujemy wszystkie wpływy na zasoby (energia, środowisko).
     float baseEnergyPerSecond = 0.f;
     m_netEnvChangePerSecond = 0.f;
 
     for (const auto& obj : placedObjects) {
-        if (obj.isDamaged) continue; // Uszkodzone budynki nie działają.
+        if (obj.isDamaged) continue;
         const auto* data = getBuildingData(obj.typeId);
         if (data) {
             float envEffect = data->envEffect[obj.level - 1];
@@ -275,7 +282,6 @@ void Game::update(float dt) {
 
     m_netEnergyPerSecond = baseEnergyPerSecond - contractEnergyDrain;
 
-    // Akumulator energii pozwala na płynne zmiany, nawet gdy produkcja jest ułamkowa.
     m_energyAccumulator += m_netEnergyPerSecond * dt;
     if (m_energyAccumulator >= 1.0f) {
         int energyGained = static_cast<int>(floor(m_energyAccumulator));
@@ -287,7 +293,6 @@ void Game::update(float dt) {
         m_energyAccumulator -= energyLost;
     }
 
-    // Dodatkowe modyfikatory środowiska od pogody.
     switch(m_weatherManager.getCurrentWeather()) {
     case WeatherType::Rain: m_netEnvChangePerSecond += 0.05f; break;
     case WeatherType::AcidRain: m_netEnvChangePerSecond -= 0.2f; break;
@@ -300,7 +305,6 @@ void Game::update(float dt) {
                             [this](const std::string& msg){ this->m_uiManager.showNotification(msg); });
     m_contractManager.update(dt, *this);
 
-    // Logika "tyknięcia" co sekundę.
     if (m_secondAccumulator >= 1.0f) {
         environmentHealth += m_netEnvChangePerSecond;
         currentMoney += static_cast<int>(m_moneyFromContractsPerSecond);
@@ -309,7 +313,6 @@ void Game::update(float dt) {
         if (environmentHealth > 100) environmentHealth = 100;
     }
 
-    // Aktualizacja logiki poszczególnych budynków (np. animacji).
     for (auto& obj : placedObjects) {
         if(obj.logic && !obj.isDamaged) {
             obj.logic->update(dt, *this, obj);
@@ -327,10 +330,16 @@ void Game::update(float dt) {
     if (currentEnergy > maxEnergy) currentEnergy = maxEnergy;
     if (currentEnergy < 0) currentEnergy = 0;
 
+    if (currentEnergy == 0 && m_netEnergyPerSecond < 0) {
+        if (m_contractManager.hasActiveContracts()) {
+            m_contractManager.terminateAllActiveContracts();
+            m_uiManager.showNotification("Zerwanie kontraktów - brak energii");
+        }
+    }
+
     m_hud.update(currentMoney, m_moneyFromContractsPerSecond, currentEnergy, maxEnergy, m_netEnergyPerSecond, environmentHealth, m_netEnvChangePerSecond, totalGameTimeSeconds);
     m_uiManager.update(m_weatherManager);
 
-    // Aktualizacja wizualnych efektów pogodowych.
     updateWeatherOverlay();
     updateRainEffect(dt);
     updateCloudEffect(dt);
@@ -339,13 +348,10 @@ void Game::update(float dt) {
     updateHeatwaveEffect(dt);
 }
 
-// Implementacja głównej pętli rysującej.
 void Game::draw(sf::RenderWindow& window, GameState currentState) {
-    // Rysowanie tła w domyślnym widoku.
     window.setView(window.getDefaultView());
     m_gameBg.draw(window);
 
-    // Przełączenie na widok grywalny do rysowania świata gry.
     window.setView(m_gameplayView);
     window.draw(m_grassArea);
     for (const auto& obj : placedObjects) {
@@ -356,10 +362,8 @@ void Game::draw(sf::RenderWindow& window, GameState currentState) {
     drawDynamicWeatherEffects(window);
     drawRainEffect(window);
 
-    // Powrót do domyślnego widoku, aby narysować UI.
     window.setView(window.getDefaultView());
 
-    // Rysowanie statycznych elementów UI.
     window.draw(m_bulldozerSprite);
     window.draw(m_bellSprite);
 
@@ -368,7 +372,9 @@ void Game::draw(sf::RenderWindow& window, GameState currentState) {
         window.draw(m_notificationCircle);
         m_notificationCountText.setString(std::to_string(unreadCount));
         sf::FloatRect textBounds = m_notificationCountText.getLocalBounds();
-        m_notificationCountText.setOrigin(textBounds.left + textBounds.width / 2.f, textBounds.top + textBounds.height / 2.f);
+
+        m_notificationCountText.setOrigin(textBounds.left + textBounds.width / 2.0f, textBounds.top + textBounds.height / 1.8f);
+
         m_notificationCountText.setPosition(m_notificationCircle.getPosition().x + m_notificationCircle.getRadius(), m_notificationCircle.getPosition().y + m_notificationCircle.getRadius());
         window.draw(m_notificationCountText);
     }
@@ -391,11 +397,9 @@ void Game::draw(sf::RenderWindow& window, GameState currentState) {
         window.draw(m_demolishCancelText);
     }
     m_tooltip.draw(window);
-    // Na końcu rysujemy UIManager, aby jego panele były na samym wierzchu.
     m_uiManager.draw(window, currentState);
 }
 
-// Implementacja rysowania ikon uszkodzeń.
 void Game::drawDamagedIcons(sf::RenderWindow& window) {
     for (const auto& obj : placedObjects) {
         if (obj.isDamaged) {
@@ -412,7 +416,6 @@ void Game::drawDamagedIcons(sf::RenderWindow& window) {
     }
 }
 
-// Implementacje metod do obsługi napraw.
 void Game::setRepairTarget(PlacedObject* target) {
     m_repairTarget = target;
 }
@@ -436,7 +439,6 @@ void Game::confirmRepair() {
     m_repairTarget = nullptr;
 }
 
-// Implementacja logiki ulepszania budynku.
 void Game::upgradeBuilding(PlacedObject& building) {
     if (building.level >= GameConstants::MAX_LEVEL) return;
     int cost = 0;
@@ -452,13 +454,12 @@ void Game::upgradeBuilding(PlacedObject& building) {
         }
         building.level++;
         m_audioManager.play(SoundEffect::Upgrade);
-        m_tooltip.show(building, currentMoney); // Odświeżenie dymka z nowymi danymi.
+        m_tooltip.show(building, currentMoney);
     } else {
         m_uiManager.showNotification("Brak wystarczajacych srodkow");
     }
 }
 
-// Implementacja logiki stawiania budynku.
 void Game::placeBuilding(int typeId, int price, sf::Vector2f position, bool fromPlayerAction) {
     sf::Vector2i gridPos = m_grid.worldToGridCoords(position);
     sf::Vector2i buildingSize = getBuildingSize(typeId);
@@ -482,7 +483,6 @@ void Game::placeBuilding(int typeId, int price, sf::Vector2f position, bool from
     const auto& texture = m_buildingTextures[typeId];
     newObj.sprite.setTexture(texture);
 
-    // Logika skalowania i pozycjonowania sprite'a.
     float sourceWidth = static_cast<float>(texture.getSize().x);
     float sourceHeight = static_cast<float>(texture.getSize().y);
     sf::Vector2f targetSize(buildingSize.x * GameConstants::GRID_CELL_SIZE, buildingSize.y * GameConstants::GRID_CELL_SIZE);
@@ -506,15 +506,13 @@ void Game::placeBuilding(int typeId, int price, sf::Vector2f position, bool from
     placedObjects.push_back(std::move(newObj));
 }
 
-// Implementacje prostych getterów.
 Grid& Game::getGrid() { return m_grid; }
 HUD& Game::getHUD() { return m_hud; }
 AudioManager& Game::getAudioManager() { return m_audioManager; }
 WeatherManager& Game::getWeatherManager() { return m_weatherManager; }
 ContractManager& Game::getContractManager() { return m_contractManager; }
+const ContractManager& Game::getContractManager() const { return m_contractManager; }
 float Game::getNetEnergyPerSecond() const { return m_netEnergyPerSecond; }
-
-// --- Implementacje metod do obsługi efektów pogodowych ---
 
 void Game::initializeWeatherEffects() {
     m_weatherOverlay.setSize({m_playableArea.width, m_playableArea.height});

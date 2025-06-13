@@ -110,15 +110,17 @@ std::vector<Contract> ContractManager::getActiveContracts() const {
     return active;
 }
 
-// Proste gettery i metody do zarządzania stanem.
+// Implementacja gettera dla liczby nieprzeczytanych kontraktów.
 int ContractManager::getUnreadCount() const {
     return m_unreadContractCount;
 }
 
+// Implementacja oznaczania kontraktów jako przeczytane.
 void ContractManager::markAsRead() {
     m_unreadContractCount = 0;
 }
 
+// Implementacja akceptowania kontraktu.
 void ContractManager::acceptContract(int contractId) {
     for (auto& contract : m_contracts) {
         if (contract.id == contractId && contract.status == ContractStatus::Pending) {
@@ -128,6 +130,7 @@ void ContractManager::acceptContract(int contractId) {
     }
 }
 
+// Implementacja odrzucania kontraktu.
 void ContractManager::rejectContract(int contractId) {
     // Użycie idiomatycznego połączenia `remove_if` i `erase` do usunięcia elementu z wektora.
     m_contracts.erase(std::remove_if(m_contracts.begin(), m_contracts.end(),
@@ -136,6 +139,7 @@ void ContractManager::rejectContract(int contractId) {
                                      }), m_contracts.end());
 }
 
+// Implementacja anulowania aktywnego kontraktu.
 void ContractManager::cancelContract(int contractId) {
     for (auto& contract : m_contracts) {
         if (contract.id == contractId && contract.status == ContractStatus::Active) {
@@ -150,6 +154,7 @@ void ContractManager::cancelContract(int contractId) {
     }
 }
 
+// Implementacja pobierania kontraktu po jego ID.
 const Contract* ContractManager::getContractById(int contractId) const {
     for (const auto& contract : m_contracts) {
         if (contract.id == contractId) {
@@ -157,4 +162,48 @@ const Contract* ContractManager::getContractById(int contractId) const {
         }
     }
     return nullptr;
+}
+
+// Implementacja resetowania stanu menedżera.
+void ContractManager::reset() {
+    m_contracts.clear();
+    m_unreadContractCount = 0;
+    m_nextContractId = 0;
+    m_generationTimer.restart();
+}
+
+// Implementacja wczytywania stanu.
+void ContractManager::loadState(const std::vector<Contract>& contracts, int nextId, int unreadCount) {
+    m_contracts = contracts;
+    m_nextContractId = nextId;
+    m_unreadContractCount = unreadCount;
+    m_generationTimer.restart();
+}
+
+// Implementacja gettera dla wszystkich kontraktów (do zapisu).
+const std::vector<Contract>& ContractManager::getContracts() const {
+    return m_contracts;
+}
+
+// Implementacja gettera dla ID następnego kontraktu (do zapisu).
+int ContractManager::getNextContractId() const {
+    return m_nextContractId;
+}
+
+// Implementacja sprawdzania, czy są aktywne kontrakty.
+bool ContractManager::hasActiveContracts() const {
+    for (const auto& contract : m_contracts) {
+        if (contract.status == ContractStatus::Active) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Implementacja zrywania wszystkich aktywnych kontraktów.
+void ContractManager::terminateAllActiveContracts() {
+    m_contracts.erase(std::remove_if(m_contracts.begin(), m_contracts.end(),
+                                     [](const Contract& c) {
+                                         return c.status == ContractStatus::Active;
+                                     }), m_contracts.end());
 }
